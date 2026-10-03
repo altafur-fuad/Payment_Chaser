@@ -6,7 +6,10 @@
  * @created 2026-10-01
  */
 
+'use client'
+
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import {
     BarChart3,
     FileText,
@@ -44,6 +47,8 @@ const navItems = [
 ]
 
 export function Sidebar() {
+    const pathname = usePathname()
+
     return (
         <aside className="hidden w-64 shrink-0 border-r border-border bg-background lg:flex lg:flex-col">
             <div className="flex h-16 items-center border-b border-border px-6">
@@ -61,7 +66,9 @@ export function Sidebar() {
             >
                 {navItems.map((item) => {
                     const Icon = item.icon
-                    const isActive = item.href === '/dashboard'
+                    const isActive =
+                        pathname === item.href ||
+                        pathname.startsWith(`${item.href}/`)
 
                     return (
                         <Link

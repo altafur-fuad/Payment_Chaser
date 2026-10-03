@@ -6,6 +6,9 @@
  * @created 2026-10-01
  */
 
+'use client'
+
+import { useTheme } from 'next-themes'
 import {
     Bell,
     Moon,
@@ -13,6 +16,8 @@ import {
 } from 'lucide-react'
 
 export function Topbar() {
+    const { theme, setTheme } = useTheme()
+
     return (
         <header className="flex min-h-16 items-center justify-between border-b border-border bg-background px-4 md:px-6">
             <div className="flex min-w-0 items-center">
@@ -53,6 +58,9 @@ export function Topbar() {
 
                 <button
                     type="button"
+                    onClick={() =>
+                        setTheme(theme === 'dark' ? 'light' : 'dark')
+                    }
                     aria-label="Toggle dark mode"
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-foreground transition-colors duration-150 hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
