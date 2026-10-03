@@ -14,18 +14,18 @@ import {
 
 export function Topbar() {
     return (
-        <header className="flex h-16 items-center justify-between border-b border-border bg-background px-4 md:px-6">
-            <div className="flex items-center gap-3">
-                <h1 className="text-lg font-semibold text-foreground">
+        <header className="flex min-h-16 items-center justify-between border-b border-border bg-background px-4 md:px-6">
+            <div className="flex min-w-0 items-center">
+                <h1 className="truncate text-lg font-semibold text-foreground">
                     Dashboard
                 </h1>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
                 <button
                     type="button"
                     aria-label="Search"
-                    className="flex h-11 w-11 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-foreground transition-colors duration-150 hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                     <Search
                         size={20}
@@ -37,19 +37,24 @@ export function Topbar() {
                 <button
                     type="button"
                     aria-label="Notifications"
-                    className="flex h-11 w-11 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-foreground transition-colors duration-150 hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                     <Bell
                         size={20}
                         strokeWidth={1.75}
                         aria-hidden="true"
                     />
+
+                    <span
+                        aria-label="1 unread notification"
+                        className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-danger"
+                    />
                 </button>
 
                 <button
                     type="button"
                     aria-label="Toggle dark mode"
-                    className="flex h-11 w-11 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-foreground transition-colors duration-150 hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                     <Moon
                         size={20}
@@ -58,7 +63,10 @@ export function Topbar() {
                     />
                 </button>
 
-                <div className="ml-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary-soft text-sm font-semibold text-primary">
+                <div
+                    className="ml-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-semibold text-primary sm:ml-2"
+                    aria-label="User profile"
+                >
                     MH
                 </div>
             </div>

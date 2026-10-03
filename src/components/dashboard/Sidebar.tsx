@@ -74,7 +74,7 @@ export function Sidebar() {
                                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                                 isActive
                                     ? 'bg-primary-soft text-primary'
-                                    : 'text-muted hover:bg-surface hover:text-foreground',
+                                    : 'text-foreground hover:bg-surface',
                             ].join(' ')}
                         >
                             <Icon
