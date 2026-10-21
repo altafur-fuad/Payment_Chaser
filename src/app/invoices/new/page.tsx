@@ -6,7 +6,23 @@ import { Topbar } from '@/components/dashboard/Topbar'
 import { MobileBottomNav } from '@/components/dashboard/MobileBottomNav'
 import { InvoiceForm } from './InvoiceForm'
 
-export default function NewInvoicePage() {
+type NewInvoicePageProps = {
+    searchParams: Promise<{
+        template?: string | string[]
+    }>
+}
+
+export default async function NewInvoicePage({
+    searchParams,
+}: NewInvoicePageProps) {
+    const params = await searchParams
+
+    const templateParam = params.template
+
+    const initialInvoiceTemplateId = Array.isArray(templateParam)
+        ? templateParam[0]
+        : templateParam
+
     return (
         <div className="flex min-h-screen bg-background">
             <Sidebar />
@@ -21,7 +37,10 @@ export default function NewInvoicePage() {
                                 href="/invoices"
                                 className="inline-flex min-h-10 items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-slate-400"
                             >
-                                <ArrowLeft size={18} aria-hidden="true" />
+                                <ArrowLeft
+                                    size={18}
+                                    aria-hidden="true"
+                                />
                                 Back to Invoices
                             </Link>
 
@@ -36,7 +55,11 @@ export default function NewInvoicePage() {
                             </div>
                         </div>
 
-                        <InvoiceForm />
+                        <InvoiceForm
+                            initialInvoiceTemplateId={
+                                initialInvoiceTemplateId
+                            }
+                        />
                     </section>
                 </main>
             </div>
