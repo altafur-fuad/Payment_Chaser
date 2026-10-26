@@ -90,6 +90,13 @@ export function SettingsForm() {
         }
 
         setSaved(true)
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+                new CustomEvent('payment-chaser-profile-update', {
+                    detail: { displayName: profileData.displayName },
+                })
+            )
+        }
         window.setTimeout(() => {
             setSaved(false)
         }, 3000)

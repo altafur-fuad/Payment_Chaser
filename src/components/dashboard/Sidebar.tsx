@@ -57,12 +57,30 @@ export function Sidebar() {
     const [isLoggingOut, setIsLoggingOut] = useState(false)
 
     useEffect(() => {
-        getCurrentUser().then((res) => {
-            if (res.ok && res.data) {
-                setUserDisplayName(res.data.displayName || res.data.email.split('@')[0] || 'Freelancer')
-                setUserEmail(res.data.email)
+        const fetchUser = () => {
+            getCurrentUser().then((res) => {
+                if (res.ok && res.data) {
+                    setUserDisplayName(res.data.displayName || res.data.email.split('@')[0] || 'Freelancer')
+                    setUserEmail(res.data.email)
+                }
+            })
+        }
+
+        fetchUser()
+
+        const handleUpdate = (e: Event) => {
+            const customEvent = e as CustomEvent<{ displayName?: string }>
+            if (customEvent.detail?.displayName) {
+                setUserDisplayName(customEvent.detail.displayName)
+            } else {
+                fetchUser()
             }
-        })
+        }
+
+        window.addEventListener('payment-chaser-profile-update', handleUpdate)
+        return () => {
+            window.removeEventListener('payment-chaser-profile-update', handleUpdate)
+        }
     }, [])
 
     const handleSignOut = async () => {

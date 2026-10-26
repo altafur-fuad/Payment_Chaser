@@ -160,8 +160,15 @@ export async function updateProfile(
             return { ok: false, error: 'Failed to update profile settings.' }
         }
 
+        // Also synchronize full_name in auth user metadata
+        await supabase.auth.updateUser({
+            data: {
+                full_name: validated.data.displayName.trim(),
+            },
+        })
+
+        revalidatePath('/', 'layout')
         revalidatePath('/settings')
-        revalidatePath('/')
 
         return { ok: true, data: mapDbToProfile(data as DbProfileRow, user.email) }
     } catch (err: unknown) {

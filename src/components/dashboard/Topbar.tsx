@@ -32,12 +32,30 @@ export function Topbar() {
     )
 
     useEffect(() => {
-        getCurrentUser().then((res) => {
-            if (res.ok && res.data) {
-                setUserDisplayName(res.data.displayName || res.data.email.split('@')[0] || 'User')
-                setUserEmail(res.data.email)
+        const fetchUser = () => {
+            getCurrentUser().then((res) => {
+                if (res.ok && res.data) {
+                    setUserDisplayName(res.data.displayName || res.data.email.split('@')[0] || 'User')
+                    setUserEmail(res.data.email)
+                }
+            })
+        }
+
+        fetchUser()
+
+        const handleUpdate = (e: Event) => {
+            const customEvent = e as CustomEvent<{ displayName?: string }>
+            if (customEvent.detail?.displayName) {
+                setUserDisplayName(customEvent.detail.displayName)
+            } else {
+                fetchUser()
             }
-        })
+        }
+
+        window.addEventListener('payment-chaser-profile-update', handleUpdate)
+        return () => {
+            window.removeEventListener('payment-chaser-profile-update', handleUpdate)
+        }
     }, [])
 
     const handleSearch = (e: React.FormEvent) => {

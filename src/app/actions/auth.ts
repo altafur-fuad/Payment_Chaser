@@ -288,12 +288,24 @@ export async function getCurrentUser(): Promise<Result<AuthUserResponse | null>>
             return { ok: true, data: null }
         }
 
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('display_name')
+            .eq('id', user.id)
+            .maybeSingle()
+
+        const displayName =
+            profile?.display_name ||
+            (user.user_metadata?.full_name as string) ||
+            user.email?.split('@')[0] ||
+            'User'
+
         return {
             ok: true,
             data: {
                 id: user.id,
                 email: user.email || '',
-                displayName: (user.user_metadata?.full_name as string) || undefined,
+                displayName,
             },
         }
     } catch {
