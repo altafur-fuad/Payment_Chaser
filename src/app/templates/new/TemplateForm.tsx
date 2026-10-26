@@ -7,8 +7,12 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 
-import { mockTemplates } from '@/lib/mock/templates'
-import type { ReminderTone, TemplateInput } from '@/types'
+import {
+    getTemplateById,
+    createTemplate,
+    saveTemplate,
+} from '@/lib/mock/storage'
+import type { ReminderTone, Template, TemplateInput } from '@/types'
 
 const templateSchema = z.object({
     name: z
@@ -38,9 +42,10 @@ interface TemplateFormProps {
 export function TemplateForm({ templateId }: TemplateFormProps) {
     const [submitted, setSubmitted] = useState(false)
 
-    const existingTemplate = templateId
-        ? mockTemplates.find((template) => template.id === templateId)
-        : undefined
+    const [existingTemplate] = useState<Template | undefined>(() => {
+        if (!templateId) return undefined
+        return getTemplateById(templateId)
+    })
 
     const isEditMode = Boolean(templateId)
 
@@ -67,14 +72,14 @@ export function TemplateForm({ templateId }: TemplateFormProps) {
             body: values.body.trim(),
         }
 
-        console.log(
-            isEditMode ? 'Update template:' : 'Create template:',
-            input,
-        )
-
-        await new Promise((resolve) => {
-            setTimeout(resolve, 500)
-        })
+        if (isEditMode && existingTemplate) {
+            saveTemplate({
+                ...existingTemplate,
+                ...input,
+            })
+        } else {
+            createTemplate(input)
+        }
 
         setSubmitted(true)
     }

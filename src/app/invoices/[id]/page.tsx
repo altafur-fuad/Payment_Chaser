@@ -1,11 +1,12 @@
 /**
  * @file src/app/invoices/[id]/page.tsx
- * @description Responsive invoice details page for Payment Chaser.
- * @phase 5
- * @author Payment Chaser Team
- * @created 2026-10-04
+ * @description Responsive invoice details page supporting both mock and stored invoices.
  */
 
+'use client'
+
+import { useMemo, useState } from 'react'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
     ArrowLeft,
@@ -26,13 +27,9 @@ import { MobileBottomNav } from '@/components/dashboard/MobileBottomNav'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ToneBadge } from '@/components/shared/ToneBadge'
 import { CurrencyText } from '@/components/shared/CurrencyText'
-import { mockInvoices } from '@/lib/mock/invoices'
-
-interface InvoiceDetailsPageProps {
-    params: Promise<{
-        id: string
-    }>
-}
+import { useInvoices } from '@/lib/mock/use-mock-data'
+import { markInvoiceAsPaid, saveInvoice } from '@/lib/mock/storage'
+import type { Invoice } from '@/types'
 
 function DetailItem({
     icon: Icon,
@@ -80,12 +77,16 @@ function SectionCard({
     )
 }
 
-export default async function InvoiceDetailsPage({
-    params,
-}: InvoiceDetailsPageProps) {
-    const { id } = await params
+export default function InvoiceDetailsPage() {
+    const params = useParams<{ id: string }>()
+    const invoiceId = params.id
+    const invoices = useInvoices()
 
-    const invoice = mockInvoices.find((item) => item.id === id)
+    const invoice = useMemo(() => {
+        return invoices.find((item) => item.id === invoiceId)
+    }, [invoices, invoiceId])
+
+    const [actionNotice, setActionNotice] = useState<string | null>(null)
 
     if (!invoice) {
         return (
@@ -131,6 +132,25 @@ export default async function InvoiceDetailsPage({
             : invoice.templateId === 'template-firm'
               ? 'firm'
               : 'friendly'
+
+    const handleMarkAsPaid = () => {
+        markInvoiceAsPaid(invoice.id)
+        setActionNotice(
+            `Invoice ${invoice.invoiceNumber} has been marked as paid. Future reminders have been cancelled.`,
+        )
+    }
+
+    const handleSimulateReminder = () => {
+        const nextSent = (invoice.remindersSent ?? 0) + 1
+        const updatedInvoice: Invoice = {
+            ...invoice,
+            remindersSent: nextSent,
+        }
+        saveInvoice(updatedInvoice)
+        setActionNotice(
+            `Simulated reminder sent to ${invoice.clientName} via ${invoice.channels.join(' & ')}. (Production sending will connect to email/WhatsApp webhooks).`,
+        )
+    }
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-[#0B1220]">
@@ -180,6 +200,22 @@ export default async function InvoiceDetailsPage({
                                     Edit Invoice
                                 </Link>
                             </header>
+
+                            {actionNotice && (
+                                <div
+                                    role="status"
+                                    className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-200"
+                                >
+                                    <span>{actionNotice}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setActionNotice(null)}
+                                        className="text-xs text-blue-600 hover:underline dark:text-blue-400"
+                                    >
+                                        Dismiss
+                                    </button>
+                                </div>
+                            )}
 
                             {/* Main layout */}
                             <div className="grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-3">
@@ -326,6 +362,19 @@ export default async function InvoiceDetailsPage({
                                         </div>
                                     </SectionCard>
 
+                                    {/* Document attachment notice */}
+                                    <SectionCard title="Invoice Document">
+                                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                                            {invoice.filePath ? (
+                                                `Attached document: ${invoice.filePath}`
+                                            ) : (
+                                                <span className="italic text-slate-500">
+                                                    No document attached. (File uploads are validated locally in this prototype and will be stored securely when cloud storage is connected).
+                                                </span>
+                                            )}
+                                        </p>
+                                    </SectionCard>
+
                                     {/* Notes */}
                                     {invoice.notes && (
                                         <SectionCard title="Notes">
@@ -399,20 +448,19 @@ export default async function InvoiceDetailsPage({
                                             {reminderTone === 'urgent'
                                                 ? 'A direct tone for overdue or time-sensitive payments.'
                                                 : reminderTone === 'firm'
-                                                  ? 'A professional and firm tone for payment follow-ups.'
-                                                  : 'A friendly tone to maintain positive client relationships.'}
+                                                   ? 'A professional and firm tone for payment follow-ups.'
+                                                   : 'A friendly tone to maintain positive client relationships.'}
                                         </p>
                                     </SectionCard>
 
                                     {/* Quick actions */}
                                     <SectionCard title="Quick Actions">
                                         <div className="space-y-3">
-                                            {invoice.status !== 'paid' && (
+                                            {invoice.status !== 'paid' ? (
                                                 <button
                                                     type="button"
-                                                    disabled
-                                                    title="Payment updates require backend integration."
-                                                    className="inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white opacity-70"
+                                                    onClick={handleMarkAsPaid}
+                                                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                                 >
                                                     <CheckCircle2
                                                         size={17}
@@ -420,24 +468,33 @@ export default async function InvoiceDetailsPage({
                                                     />
                                                     Mark as Paid
                                                 </button>
+                                            ) : (
+                                                <div className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                                                    <CheckCircle2
+                                                        size={17}
+                                                        aria-hidden="true"
+                                                    />
+                                                    Invoice Paid
+                                                </div>
                                             )}
 
-                                            <button
-                                                type="button"
-                                                disabled
-                                                title="Sending reminders requires backend integration."
-                                                className="inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 opacity-70 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
-                                            >
-                                                <Send
-                                                    size={17}
-                                                    aria-hidden="true"
-                                                />
-                                                Send Reminder
-                                            </button>
+                                            {invoice.status !== 'paid' && (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleSimulateReminder}
+                                                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                                                >
+                                                    <Send
+                                                        size={17}
+                                                        aria-hidden="true"
+                                                    />
+                                                    Simulate Send Reminder
+                                                </button>
+                                            )}
 
                                             <p className="pt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-                                                Actions will be available after
-                                                backend integration.
+                                                Action updates will persist across
+                                                all screens in this session.
                                             </p>
                                         </div>
                                     </SectionCard>

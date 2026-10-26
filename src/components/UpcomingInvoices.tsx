@@ -1,32 +1,49 @@
+'use client'
+
 /**
  * @file src/components/UpcomingInvoices.tsx
- * @description Dashboard section for upcoming invoices.
- * @phase 2
- * @author Payment Chaser Team
- * @created 2026-10-01
+ * @description Dashboard section for upcoming invoices with dynamic mock calculations.
  */
 
-import { ArrowRight, CalendarDays } from 'lucide-react'
+import { ArrowRight, CalendarDays, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 
-const invoices = [
-    {
-        invoiceNumber: 'INV-002',
-        clientName: 'Sample Client',
-        amount: '$500.00',
-        dueDate: 'Oct 10, 2026',
-        daysUntilDue: 7,
-    },
-    {
-        invoiceNumber: 'INV-003',
-        clientName: 'Demo Company',
-        amount: '$750.00',
-        dueDate: 'Oct 14, 2026',
-        daysUntilDue: 11,
-    },
-]
+import { useInvoices } from '@/lib/mock/use-mock-data'
+import { getUpcomingInvoicesList } from '@/lib/mock/storage'
+import type { Invoice } from '@/types'
 
-export function UpcomingInvoices() {
+function formatAmount(amount: number, currency: string = 'USD'): string {
+    try {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: currency || 'USD',
+            maximumFractionDigits: 2,
+        }).format(amount)
+    } catch {
+        return `$${amount.toFixed(2)}`
+    }
+}
+
+function formatDate(dateString: string): string {
+    if (!dateString) return '—'
+    const date = new Date(`${dateString.slice(0, 10)}T00:00:00`)
+    if (Number.isNaN(date.getTime())) return dateString
+    return new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+    }).format(date)
+}
+
+interface UpcomingInvoicesProps {
+    invoices?: Invoice[]
+}
+
+export function UpcomingInvoices({ invoices: propInvoices }: UpcomingInvoicesProps) {
+    const storeInvoices = useInvoices()
+    const invoices = propInvoices ?? storeInvoices
+    const upcomingList = getUpcomingInvoicesList(invoices)
+
     return (
         <section className="space-y-4">
             <div className="flex items-center justify-between">
@@ -35,7 +52,7 @@ export function UpcomingInvoices() {
                         Upcoming Invoices
                     </h2>
 
-                    <p className="mt-1 text-sm text-foreground">
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                         Invoices with upcoming payment deadlines.
                     </p>
                 </div>
@@ -54,45 +71,59 @@ export function UpcomingInvoices() {
             </div>
 
             <div className="rounded-lg border border-border bg-background">
-                <div className="divide-y divide-border">
-                    {invoices.map((invoice) => (
-                        <div
-                            key={invoice.invoiceNumber}
-                            className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6"
-                        >
-                            <div className="flex items-start gap-3">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
-                                    <CalendarDays
-                                        size={20}
-                                        strokeWidth={1.75}
-                                        aria-hidden="true"
-                                    />
+                {upcomingList.length === 0 ? (
+                    <div className="flex items-center gap-3 p-6 text-sm text-slate-600 dark:text-slate-400">
+                        <CheckCircle2
+                            size={20}
+                            className="text-primary shrink-0"
+                            aria-hidden="true"
+                        />
+                        <p>No upcoming pending invoices.</p>
+                    </div>
+                ) : (
+                    <div className="divide-y divide-border">
+                        {upcomingList.slice(0, 5).map((invoice) => (
+                            <Link
+                                key={invoice.invoiceNumber}
+                                href={`/invoices/${invoice.invoiceId}`}
+                                className="flex flex-col gap-4 p-4 transition-colors hover:bg-slate-50 dark:hover:bg-slate-900/50 sm:flex-row sm:items-center sm:justify-between sm:p-6"
+                            >
+                                <div className="flex items-start gap-3">
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+                                        <CalendarDays
+                                            size={20}
+                                            strokeWidth={1.75}
+                                            aria-hidden="true"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <p className="font-medium text-foreground">
+                                            {invoice.clientName}
+                                        </p>
+
+                                        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                                            {invoice.invoiceNumber}
+                                        </p>
+                                    </div>
                                 </div>
 
-                                <div>
-                                    <p className="font-medium text-foreground">
-                                        {invoice.clientName}
+                                <div className="sm:text-right">
+                                    <p className="font-mono text-sm font-semibold text-foreground">
+                                        {formatAmount(invoice.amount, invoice.currency)}
                                     </p>
 
-                                    <p className="mt-1 text-sm text-foreground">
-                                        {invoice.invoiceNumber}
+                                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                        Due {formatDate(invoice.dueDate)} ·{' '}
+                                        {invoice.daysUntilDue === 0
+                                            ? 'Due today'
+                                            : `${invoice.daysUntilDue} days left`}
                                     </p>
                                 </div>
-                            </div>
-
-                            <div className="sm:text-right">
-                                <p className="font-mono text-sm font-semibold text-foreground">
-                                    {invoice.amount}
-                                </p>
-
-                                <p className="mt-1 text-xs text-foreground">
-                                    Due {invoice.dueDate} ·{' '}
-                                    {invoice.daysUntilDue} days left
-                                </p>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                            </Link>
+                        ))}
+                    </div>
+                )}
             </div>
         </section>
     )

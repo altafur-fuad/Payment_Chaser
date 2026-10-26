@@ -9,7 +9,7 @@ import { Plus, FileText, ArrowUpRight } from 'lucide-react'
 import { Sidebar } from '@/components/dashboard/Sidebar'
 import { Topbar } from '@/components/dashboard/Topbar'
 import { MobileBottomNav } from '@/components/dashboard/MobileBottomNav'
-import { InvoiceTemplateGallery } from './InvoiceTemplateGallery'
+import { TemplateList } from './TemplateList'
 
 export default function TemplatesPage() {
     return (
@@ -94,7 +94,7 @@ export default function TemplatesPage() {
                                 </div>
                             </div>
 
-                            <InvoiceTemplateGallery />
+                            <TemplateList />
                         </section>
 
                         {/* Helpful Note */}

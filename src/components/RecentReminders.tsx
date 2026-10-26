@@ -1,9 +1,8 @@
+'use client'
+
 /**
  * @file src/components/RecentReminders.tsx
- * @description Dashboard section showing recent reminder activity.
- * @phase 2
- * @author Payment Chaser Team
- * @created 2026-10-01
+ * @description Dashboard section showing recent reminder activity from dynamic mock storage.
  */
 
 import {
@@ -11,27 +10,23 @@ import {
     CheckCircle2,
     Mail,
     MessageCircle,
+    BellOff,
 } from 'lucide-react'
 import Link from 'next/link'
 
-const reminders = [
-    {
-        id: 'REM-001',
-        clientName: 'Demo Client',
-        channel: 'Email',
-        status: 'Delivered',
-        sentAt: 'Today, 10:30 AM',
-    },
-    {
-        id: 'REM-002',
-        clientName: 'Sample Client',
-        channel: 'WhatsApp',
-        status: 'Sent',
-        sentAt: 'Yesterday, 3:15 PM',
-    },
-]
+import { useInvoices } from '@/lib/mock/use-mock-data'
+import { getRecentRemindersList } from '@/lib/mock/storage'
+import type { Invoice } from '@/types'
 
-export function RecentReminders() {
+interface RecentRemindersProps {
+    invoices?: Invoice[]
+}
+
+export function RecentReminders({ invoices: propInvoices }: RecentRemindersProps) {
+    const storeInvoices = useInvoices()
+    const invoices = propInvoices ?? storeInvoices
+    const reminders = getRecentRemindersList(invoices)
+
     return (
         <section className="space-y-4">
             <div className="flex items-center justify-between">
@@ -40,8 +35,8 @@ export function RecentReminders() {
                         Recent Reminders
                     </h2>
 
-                    <p className="mt-1 text-sm text-foreground">
-                        Latest automated payment reminder activity.
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                        Latest payment reminder activity.
                     </p>
                 </div>
 
@@ -59,61 +54,73 @@ export function RecentReminders() {
             </div>
 
             <div className="rounded-lg border border-border bg-background">
-                <div className="divide-y divide-border">
-                    {reminders.map((reminder) => (
-                        <div
-                            key={reminder.id}
-                            className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6"
-                        >
-                            <div className="flex items-start gap-3">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success-soft text-success">
-                                    {reminder.channel === 'Email' ? (
-                                        <Mail
-                                            size={20}
-                                            strokeWidth={1.75}
-                                            aria-hidden="true"
-                                        />
-                                    ) : (
-                                        <MessageCircle
-                                            size={20}
-                                            strokeWidth={1.75}
-                                            aria-hidden="true"
-                                        />
-                                    )}
+                {reminders.length === 0 ? (
+                    <div className="flex items-center gap-3 p-6 text-sm text-slate-600 dark:text-slate-400">
+                        <BellOff
+                            size={20}
+                            className="text-slate-400 shrink-0"
+                            aria-hidden="true"
+                        />
+                        <p>No reminders sent yet. Send reminders from the invoice detail page.</p>
+                    </div>
+                ) : (
+                    <div className="divide-y divide-border">
+                        {reminders.map((reminder) => (
+                            <Link
+                                key={reminder.id}
+                                href={reminder.invoiceId ? `/invoices/${reminder.invoiceId}` : '/invoices'}
+                                className="flex flex-col gap-4 p-4 transition-colors hover:bg-slate-50 dark:hover:bg-slate-900/50 sm:flex-row sm:items-center sm:justify-between sm:p-6"
+                            >
+                                <div className="flex items-start gap-3">
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
+                                        {reminder.channel === 'Email' ? (
+                                            <Mail
+                                                size={20}
+                                                strokeWidth={1.75}
+                                                aria-hidden="true"
+                                            />
+                                        ) : (
+                                            <MessageCircle
+                                                size={20}
+                                                strokeWidth={1.75}
+                                                aria-hidden="true"
+                                            />
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <p className="font-medium text-foreground">
+                                            {reminder.clientName}
+                                        </p>
+
+                                        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                                            {reminder.channel} · {reminder.invoiceNumber}
+                                        </p>
+                                    </div>
                                 </div>
 
-                                <div>
-                                    <p className="font-medium text-foreground">
-                                        {reminder.clientName}
-                                    </p>
+                                <div className="flex items-center gap-3 sm:text-right">
+                                    <div>
+                                        <p className="text-sm font-medium text-foreground">
+                                            {reminder.status}
+                                        </p>
 
-                                    <p className="mt-1 text-sm text-foreground">
-                                        {reminder.channel} · {reminder.id}
-                                    </p>
+                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                            {reminder.sentAt}
+                                        </p>
+                                    </div>
+
+                                    <CheckCircle2
+                                        size={20}
+                                        strokeWidth={1.75}
+                                        className="text-emerald-600 dark:text-emerald-400"
+                                        aria-label="Reminder successful"
+                                    />
                                 </div>
-                            </div>
-
-                            <div className="flex items-center gap-3 sm:text-right">
-                                <div>
-                                    <p className="text-sm font-medium text-foreground">
-                                        {reminder.status}
-                                    </p>
-
-                                    <p className="mt-1 text-xs text-foreground">
-                                        {reminder.sentAt}
-                                    </p>
-                                </div>
-
-                                <CheckCircle2
-                                    size={20}
-                                    strokeWidth={1.75}
-                                    className="text-success"
-                                    aria-label="Reminder successful"
-                                />
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                            </Link>
+                        ))}
+                    </div>
+                )}
             </div>
         </section>
     )

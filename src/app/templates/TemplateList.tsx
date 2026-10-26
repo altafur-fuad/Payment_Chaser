@@ -13,11 +13,12 @@ import {
 
 import { Input } from '@/components/ui/input'
 import { ToneBadge } from '@/components/shared/ToneBadge'
-import { mockTemplates } from '@/lib/mock/templates'
+import { useTemplates } from '@/lib/mock/use-mock-data'
+import { deleteTemplate } from '@/lib/mock/storage'
 
 export function TemplateList() {
     const [search, setSearch] = useState('')
-    const [templates, setTemplates] = useState(mockTemplates)
+    const templates = useTemplates()
 
     const filteredTemplates = useMemo(() => {
         const query = search.trim().toLowerCase()
@@ -52,9 +53,7 @@ export function TemplateList() {
 
         if (!confirmed) return
 
-        setTemplates((currentTemplates) =>
-            currentTemplates.filter((item) => item.id !== id),
-        )
+        deleteTemplate(id)
     }
 
     return (

@@ -1,24 +1,38 @@
+'use client'
+
 /**
  * @file src/components/NeedsAttention.tsx
- * @description Dashboard section for invoices that need attention.
- * @phase 2
- * @author Payment Chaser Team
- * @created 2026-10-01
+ * @description Dashboard section for invoices that need attention, backed by dynamic mock data.
  */
 
-import { AlertTriangle, ArrowRight } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 
-const items = [
-    {
-        invoiceNumber: 'INV-001',
-        clientName: 'Demo Client',
-        amount: '$0.00',
-        daysOverdue: 0,
-    },
-]
+import { useInvoices } from '@/lib/mock/use-mock-data'
+import { getNeedsAttentionItems } from '@/lib/mock/storage'
+import type { Invoice } from '@/types'
 
-export function NeedsAttention() {
+function formatAmount(amount: number, currency: string = 'USD'): string {
+    try {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: currency || 'USD',
+            maximumFractionDigits: 2,
+        }).format(amount)
+    } catch {
+        return `$${amount.toFixed(2)}`
+    }
+}
+
+interface NeedsAttentionProps {
+    invoices?: Invoice[]
+}
+
+export function NeedsAttention({ invoices: propInvoices }: NeedsAttentionProps) {
+    const storeInvoices = useInvoices()
+    const invoices = propInvoices ?? storeInvoices
+    const items = getNeedsAttentionItems(invoices)
+
     return (
         <section className="space-y-4">
             <div className="flex items-center justify-between">
@@ -27,7 +41,7 @@ export function NeedsAttention() {
                         Needs Attention
                     </h2>
 
-                    <p className="mt-1 text-sm text-foreground">
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                         Invoices that may need your attention.
                     </p>
                 </div>
@@ -46,42 +60,58 @@ export function NeedsAttention() {
             </div>
 
             <div className="rounded-lg border border-border bg-background">
-                {items.map((item) => (
-                    <div
-                        key={item.invoiceNumber}
-                        className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6"
-                    >
-                        <div className="flex items-start gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning-soft text-warning">
-                                <AlertTriangle
-                                    size={20}
-                                    strokeWidth={1.75}
-                                    aria-hidden="true"
-                                />
-                            </div>
-
-                            <div>
-                                <p className="font-medium text-foreground">
-                                    {item.clientName}
-                                </p>
-
-                                <p className="mt-1 text-sm text-foreground">
-                                    {item.invoiceNumber}
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="sm:text-right">
-                            <p className="font-mono text-sm font-semibold text-foreground">
-                                {item.amount}
-                            </p>
-
-                            <p className="mt-1 text-xs text-foreground">
-                                {item.daysOverdue} days overdue
-                            </p>
-                        </div>
+                {items.length === 0 ? (
+                    <div className="flex items-center gap-3 p-6 text-sm text-slate-600 dark:text-slate-400">
+                        <CheckCircle2
+                            size={20}
+                            className="text-emerald-500 shrink-0"
+                            aria-hidden="true"
+                        />
+                        <p>No overdue invoices. All accounts are in good standing!</p>
                     </div>
-                ))}
+                ) : (
+                    <div className="divide-y divide-border">
+                        {items.slice(0, 5).map((item) => (
+                            <Link
+                                key={item.invoiceNumber}
+                                href={`/invoices/${item.invoiceId}`}
+                                className="flex flex-col gap-4 p-4 transition-colors hover:bg-slate-50 dark:hover:bg-slate-900/50 sm:flex-row sm:items-center sm:justify-between sm:p-6"
+                            >
+                                <div className="flex items-start gap-3">
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400">
+                                        <AlertTriangle
+                                            size={20}
+                                            strokeWidth={1.75}
+                                            aria-hidden="true"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <p className="font-medium text-foreground">
+                                            {item.clientName}
+                                        </p>
+
+                                        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                                            {item.invoiceNumber}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="sm:text-right">
+                                    <p className="font-mono text-sm font-semibold text-foreground">
+                                        {formatAmount(item.amount, item.currency)}
+                                    </p>
+
+                                    <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">
+                                        {item.daysOverdue > 0
+                                            ? `${item.daysOverdue} days overdue`
+                                            : 'Due today / overdue'}
+                                    </p>
+                                </div>
+                            </Link>
+                        ))}
+                    </div>
+                )}
             </div>
         </section>
     )

@@ -7,6 +7,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 
+import { createClient } from '@/lib/mock/storage'
 import type { ClientInput, ReminderChannel } from '@/types'
 
 const clientSchema = z.object({
@@ -60,13 +61,12 @@ export function ClientForm() {
             preferredChannel: values.preferredChannel as ReminderChannel,
         }
 
-        console.log('Create client:', input)
-
-        await new Promise((resolve) => {
-            setTimeout(resolve, 500)
-        })
-
-        setSubmitted(true)
+        try {
+            createClient(input)
+            setSubmitted(true)
+        } catch (error) {
+            console.error('Failed to create client:', error)
+        }
     }
 
     if (submitted) {

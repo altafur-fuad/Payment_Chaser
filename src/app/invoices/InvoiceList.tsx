@@ -8,7 +8,7 @@
 
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
     CalendarDays,
@@ -21,40 +21,12 @@ import {
     X,
 } from 'lucide-react'
 
-import { mockInvoices } from '@/lib/mock/invoices'
-import type { Invoice } from '@/types'
+import { useInvoices } from '@/lib/mock/use-mock-data'
 
-const STORAGE_KEY = 'payment-chaser-created-invoices'
 const PAGE_SIZE = 6
 
 type StatusFilter = 'all' | 'pending' | 'paid' | 'overdue'
 type DateFilter = 'all' | 'this-month'
-
-function loadInvoices(): Invoice[] {
-    if (typeof window === 'undefined') {
-        return mockInvoices
-    }
-
-    try {
-        const stored = localStorage.getItem(STORAGE_KEY)
-        const savedInvoices: Invoice[] = stored
-            ? JSON.parse(stored)
-            : []
-
-        const savedIds = new Set(
-            savedInvoices.map((invoice) => invoice.id),
-        )
-
-        return [
-            ...savedInvoices,
-            ...mockInvoices.filter(
-                (invoice) => !savedIds.has(invoice.id),
-            ),
-        ]
-    } catch {
-        return mockInvoices
-    }
-}
 
 function formatDate(dateString: string): string {
     if (!dateString) return '—'
@@ -99,17 +71,13 @@ function getStatusLabel(status: string): string {
 }
 
 export function InvoiceList() {
-    const [invoices, setInvoices] = useState<Invoice[]>([])
+    const invoices = useInvoices()
     const [search, setSearch] = useState('')
     const [statusFilter, setStatusFilter] =
         useState<StatusFilter>('all')
     const [dateFilter, setDateFilter] =
         useState<DateFilter>('all')
     const [currentPage, setCurrentPage] = useState(1)
-
-    useEffect(() => {
-        setInvoices(loadInvoices())
-    }, [])
 
     const counts = useMemo(() => {
         return {

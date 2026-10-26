@@ -1,19 +1,22 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
     ArrowLeft,
-    Loader2,
     Save,
 } from 'lucide-react'
 
 import { Sidebar } from '@/components/dashboard/Sidebar'
 import { Topbar } from '@/components/dashboard/Topbar'
 import { MobileBottomNav } from '@/components/dashboard/MobileBottomNav'
-import { getAllInvoices, saveInvoice } from '@/lib/mock/invoice-storage'
-import { mockClients } from '@/lib/mock/clients'
+import {
+    getInvoiceById,
+    saveInvoice,
+    getAllClients,
+    isInvoiceNumberTaken,
+} from '@/lib/mock/storage'
 import type { Invoice } from '@/types'
 
 export default function EditInvoicePage() {
@@ -21,48 +24,40 @@ export default function EditInvoicePage() {
     const router = useRouter()
     const invoiceId = params.id
 
-    const [invoice, setInvoice] = useState<Invoice | null>(null)
-    const [invoiceNumber, setInvoiceNumber] = useState('')
-    const [clientId, setClientId] = useState('')
-    const [amount, setAmount] = useState('')
-    const [currency, setCurrency] = useState('USD')
-    const [issueDate, setIssueDate] = useState('')
-    const [dueDate, setDueDate] = useState('')
-    const [notes, setNotes] = useState('')
-    const [loading, setLoading] = useState(true)
+    const clients = useMemo(() => getAllClients(), [])
+    const initialInvoice = useMemo(() => {
+        if (!invoiceId) return undefined
+        return getInvoiceById(invoiceId)
+    }, [invoiceId])
+
+    const [invoiceNumber, setInvoiceNumber] = useState(
+        () => initialInvoice?.invoiceNumber ?? '',
+    )
+    const [clientId, setClientId] = useState(
+        () => initialInvoice?.clientId ?? '',
+    )
+    const [amount, setAmount] = useState(
+        () => (initialInvoice ? String(initialInvoice.amount) : ''),
+    )
+    const [currency, setCurrency] = useState(
+        () => initialInvoice?.currency ?? 'USD',
+    )
+    const [issueDate, setIssueDate] = useState(
+        () => initialInvoice?.issueDate ?? '',
+    )
+    const [dueDate, setDueDate] = useState(
+        () => initialInvoice?.dueDate ?? '',
+    )
+    const [notes, setNotes] = useState(
+        () => initialInvoice?.notes ?? '',
+    )
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState('')
-
-    useEffect(() => {
-        try {
-            const found = getAllInvoices().find(
-                (item) => item.id === invoiceId,
-            )
-
-            if (!found) {
-                setError('Invoice not found.')
-                return
-            }
-
-            setInvoice(found)
-            setInvoiceNumber(found.invoiceNumber)
-            setClientId(found.clientId)
-            setAmount(String(found.amount))
-            setCurrency(found.currency)
-            setIssueDate(found.issueDate)
-            setDueDate(found.dueDate)
-            setNotes(found.notes ?? '')
-        } catch {
-            setError('Unable to load invoice data.')
-        } finally {
-            setLoading(false)
-        }
-    }, [invoiceId])
 
     function handleUpdate(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault()
 
-        if (!invoice) return
+        if (!initialInvoice) return
 
         if (
             !invoiceNumber.trim() ||
@@ -81,20 +76,23 @@ export default function EditInvoicePage() {
             return
         }
 
+        if (isInvoiceNumberTaken(invoiceNumber, initialInvoice.id)) {
+            setError(
+                'This invoice number is already in use by another invoice. Please choose a different number.',
+            )
+            return
+        }
+
+        const client = clients.find((item) => item.id === clientId)
+        if (!client) {
+            setError('Please select a valid client.')
+            return
+        }
+
         setSaving(true)
         setError('')
 
         try {
-            const client = mockClients.find(
-                (item) => item.id === clientId,
-            )
-
-            if (!client) {
-                setError('Please select a valid client.')
-                setSaving(false)
-                return
-            }
-
             const today = new Date().toISOString().split('T')[0]
             const daysOverdue =
                 dueDate < today
@@ -106,7 +104,7 @@ export default function EditInvoicePage() {
                     : 0
 
             const updatedInvoice: Invoice = {
-                ...invoice,
+                ...initialInvoice,
                 invoiceNumber: invoiceNumber.trim(),
                 clientId,
                 clientName: client.name,
@@ -116,17 +114,17 @@ export default function EditInvoicePage() {
                 dueDate,
                 notes: notes.trim() || null,
                 status:
-                    invoice.status === 'paid'
+                    initialInvoice.status === 'paid'
                         ? 'paid'
                         : dueDate < today
                           ? 'overdue'
                           : 'pending',
                 daysOverdue:
-                    invoice.status === 'paid' ? 0 : daysOverdue,
+                    initialInvoice.status === 'paid' ? 0 : daysOverdue,
             }
 
             saveInvoice(updatedInvoice)
-            router.push('/invoices')
+            router.push(`/invoices/${initialInvoice.id}`)
             router.refresh()
         } catch {
             setError('Failed to update invoice. Please try again.')
@@ -144,11 +142,17 @@ export default function EditInvoicePage() {
                 <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
                     <div className="mx-auto w-full max-w-4xl space-y-6">
                         <Link
-                            href="/invoices"
+                            href={
+                                initialInvoice
+                                    ? `/invoices/${initialInvoice.id}`
+                                    : '/invoices'
+                            }
                             className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-blue-600 dark:text-slate-300"
                         >
                             <ArrowLeft size={16} />
-                            Back to Invoices
+                            {initialInvoice
+                                ? 'Back to Invoice'
+                                : 'Back to Invoices'}
                         </Link>
 
                         <div>
@@ -160,15 +164,14 @@ export default function EditInvoicePage() {
                             </p>
                         </div>
 
-                        {loading ? (
-                            <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white p-12 dark:border-slate-700 dark:bg-slate-900">
-                                <Loader2 className="animate-spin" />
-                                <span className="ml-2">Loading invoice...</span>
-                            </div>
-                        ) : !invoice ? (
+                        {!initialInvoice ? (
                             <div className="rounded-xl border border-red-200 bg-white p-8 text-center dark:border-red-900 dark:bg-slate-900">
                                 <p className="font-semibold text-red-600">
-                                    {error || 'Invoice not found.'}
+                                    Invoice not found.
+                                </p>
+                                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                                    The invoice you are trying to edit does not exist
+                                    or may have been removed.
                                 </p>
                                 <Link
                                     href="/invoices"
@@ -229,7 +232,7 @@ export default function EditInvoicePage() {
                                             <option value="">
                                                 Select client
                                             </option>
-                                            {mockClients.map((client) => (
+                                            {clients.map((client) => (
                                                 <option
                                                     key={client.id}
                                                     value={client.id}
@@ -250,8 +253,8 @@ export default function EditInvoicePage() {
                                         <input
                                             id="amount"
                                             type="number"
-                                            min="0.01"
                                             step="0.01"
+                                            min="0.01"
                                             value={amount}
                                             onChange={(event) =>
                                                 setAmount(event.target.value)
@@ -276,10 +279,18 @@ export default function EditInvoicePage() {
                                             }
                                             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none focus:border-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
                                         >
-                                            <option value="USD">USD ($)</option>
-                                            <option value="BDT">BDT (৳)</option>
-                                            <option value="EUR">EUR (€)</option>
-                                            <option value="GBP">GBP (£)</option>
+                                            <option value="USD">
+                                                USD — US Dollar
+                                            </option>
+                                            <option value="BDT">
+                                                BDT — Bangladeshi Taka
+                                            </option>
+                                            <option value="EUR">
+                                                EUR — Euro
+                                            </option>
+                                            <option value="GBP">
+                                                GBP — British Pound
+                                            </option>
                                         </select>
                                     </div>
 
@@ -312,7 +323,6 @@ export default function EditInvoicePage() {
                                         <input
                                             id="dueDate"
                                             type="date"
-                                            min={issueDate || undefined}
                                             value={dueDate}
                                             onChange={(event) =>
                                                 setDueDate(event.target.value)
@@ -337,42 +347,38 @@ export default function EditInvoicePage() {
                                         onChange={(event) =>
                                             setNotes(event.target.value)
                                         }
-                                        placeholder="Add invoice notes..."
-                                        className="w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none focus:border-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                                        placeholder="Add any notes about this invoice..."
+                                        className="w-full rounded-lg border border-slate-300 bg-white p-3 text-slate-900 outline-none focus:border-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
                                     />
                                 </div>
 
-                                <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 dark:border-slate-700 sm:flex-row sm:justify-end">
+                                <div className="flex items-center justify-end gap-3 pt-4">
                                     <Link
-                                        href="/invoices"
-                                        className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                                        href={
+                                            initialInvoice
+                                                ? `/invoices/${initialInvoice.id}`
+                                                : '/invoices'
+                                        }
+                                        className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
                                     >
                                         Cancel
                                     </Link>
-
                                     <button
                                         type="submit"
                                         disabled={saving}
-                                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                                     >
-                                        {saving ? (
-                                            <Loader2
-                                                size={16}
-                                                className="animate-spin"
-                                            />
-                                        ) : (
-                                            <Save size={16} />
-                                        )}
-                                        {saving ? 'Updating...' : 'Update Invoice'}
+                                        <Save size={16} />
+                                        {saving ? 'Saving...' : 'Save Changes'}
                                     </button>
                                 </div>
                             </form>
                         )}
                     </div>
                 </main>
-
-                <MobileBottomNav />
             </div>
+
+            <MobileBottomNav />
         </div>
     )
 }

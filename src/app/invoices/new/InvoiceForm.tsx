@@ -21,10 +21,12 @@ import {
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 
-import { mockClients } from '@/lib/mock/clients'
-import { mockTemplates } from '@/lib/mock/templates'
-import { mockInvoices } from '@/lib/mock/invoices'
-import { saveInvoice } from '@/lib/mock/invoice-storage'
+import { useClients, useTemplates } from '@/lib/mock/use-mock-data'
+import {
+    saveInvoice,
+    generateInvoiceId,
+    isInvoiceNumberTaken,
+} from '@/lib/mock/storage'
 import type { Invoice, ReminderChannel } from '@/types'
 import { InvoicePreview } from './InvoicePreview'
 
@@ -52,53 +54,73 @@ const invoiceSchema = z
             .string()
             .max(1000, 'Notes cannot exceed 1000 characters.')
             .optional(),
-        file: z.preprocess(
-            (value) => {
-                if (
-                    typeof FileList !== 'undefined' &&
-                    value instanceof FileList
-                ) {
-                    return value.length > 0
-                        ? value.item(0) ?? undefined
-                        : undefined
-                }
-
-                return value
-            },
-            z
-                .custom<File | undefined>(
-                    (value) =>
-                        value === undefined ||
-                        (typeof File !== 'undefined' && value instanceof File),
-                    { message: 'Please select a valid file.' },
-                )
-                .optional(),
-        ),
+        file: z
+            .custom<FileList | File | undefined>(
+                (value) =>
+                    value === undefined ||
+                    value === null ||
+                    (typeof FileList !== 'undefined' &&
+                        value instanceof FileList) ||
+                    (typeof File !== 'undefined' && value instanceof File),
+                { message: 'Please select a valid file.' },
+            )
+            .optional(),
     })
     .refine((data) => data.dueDate >= data.issueDate, {
         message: 'Due date cannot be before the issue date.',
         path: ['dueDate'],
     })
     .refine(
-        (data) =>
-            !data.file ||
-            ['application/pdf', 'image/png', 'image/jpeg'].includes(
-                data.file.type,
-            ),
+        (data) => {
+            if (!data.file) return true
+            let fileType: string | undefined
+            if (
+                typeof FileList !== 'undefined' &&
+                data.file instanceof FileList
+            ) {
+                if (data.file.length === 0) return true
+                fileType = data.file.item(0)?.type
+            } else if (
+                typeof File !== 'undefined' &&
+                data.file instanceof File
+            ) {
+                fileType = data.file.type
+            }
+            if (!fileType) return true
+            return ['application/pdf', 'image/png', 'image/jpeg'].includes(
+                fileType,
+            )
+        },
         {
             message: 'Only PDF, PNG, and JPG files are allowed.',
             path: ['file'],
         },
     )
     .refine(
-        (data) => !data.file || data.file.size <= 10 * 1024 * 1024,
+        (data) => {
+            if (!data.file) return true
+            let fileSize: number | undefined
+            if (
+                typeof FileList !== 'undefined' &&
+                data.file instanceof FileList
+            ) {
+                if (data.file.length === 0) return true
+                fileSize = data.file.item(0)?.size
+            } else if (
+                typeof File !== 'undefined' &&
+                data.file instanceof File
+            ) {
+                fileSize = data.file.size
+            }
+            if (!fileSize) return true
+            return fileSize <= 10 * 1024 * 1024
+        },
         {
             message: 'File size must be 10MB or less.',
             path: ['file'],
         },
     )
 
-type InvoiceFormInput = z.input<typeof invoiceSchema>
 type InvoiceFormValues = z.infer<typeof invoiceSchema>
 
 type InvoiceFormProps = {
@@ -165,8 +187,6 @@ const channelOptions: {
     { label: 'WhatsApp', value: 'whatsapp' },
 ]
 
-const STORAGE_KEY = 'payment-chaser-created-invoices'
-
 function getLocalDate(): string {
     const date = new Date()
 
@@ -180,6 +200,9 @@ function getLocalDate(): string {
 export function InvoiceForm({
     initialInvoiceTemplateId,
 }: InvoiceFormProps) {
+    const clients = useClients()
+    const templates = useTemplates()
+
     const [submitted, setSubmitted] = useState(false)
     const [savedInvoiceNumber, setSavedInvoiceNumber] = useState('')
     const [saveError, setSaveError] = useState('')
@@ -199,8 +222,8 @@ export function InvoiceForm({
         setValue,
         control,
         formState: { errors, isSubmitting },
-    } = useForm<InvoiceFormInput, any, InvoiceFormValues>({
-        resolver: zodResolver(invoiceSchema) as any,
+    } = useForm<InvoiceFormValues>({
+        resolver: zodResolver(invoiceSchema),
         defaultValues: {
             clientId: '',
             invoiceNumber: '',
@@ -208,7 +231,7 @@ export function InvoiceForm({
             currency: 'USD',
             issueDate: getLocalDate(),
             dueDate: '',
-            templateId: mockTemplates[0]?.id ?? '',
+            templateId: 'template-friendly',
             channels: ['email'],
             remindersEnabled: true,
             notes: '',
@@ -262,8 +285,8 @@ export function InvoiceForm({
     )
 
     const selectedClient = useMemo(
-        () => mockClients.find((client) => client.id === selectedClientId),
-        [selectedClientId],
+        () => clients.find((client) => client.id === selectedClientId),
+        [clients, selectedClientId],
     )
 
     const whatsappAvailable = Boolean(selectedClient?.whatsappNumber)
@@ -300,7 +323,7 @@ export function InvoiceForm({
     const onSubmit: SubmitHandler<InvoiceFormValues> = async (values) => {
         setSaveError('')
 
-        const client = mockClients.find(
+        const client = clients.find(
             (item) => item.id === values.clientId,
         )
 
@@ -309,36 +332,7 @@ export function InvoiceForm({
             return
         }
 
-        const invoiceNumber = values.invoiceNumber.trim().toLowerCase()
-
-        let savedInvoices: Invoice[]
-
-        try {
-            const stored = localStorage.getItem(STORAGE_KEY)
-            const parsed: unknown = stored ? JSON.parse(stored) : []
-
-            if (!Array.isArray(parsed)) {
-                throw new Error('Invalid saved invoice data.')
-            }
-
-            savedInvoices = parsed as Invoice[]
-        } catch (error) {
-            console.error('Could not read saved invoices:', error)
-            setSaveError(
-                'Could not read saved invoices. Please check browser storage.',
-            )
-            return
-        }
-
-        const duplicateExists = [
-            ...mockInvoices,
-            ...savedInvoices,
-        ].some(
-            (invoice) =>
-                invoice.invoiceNumber.trim().toLowerCase() === invoiceNumber,
-        )
-
-        if (duplicateExists) {
+        if (isInvoiceNumberTaken(values.invoiceNumber)) {
             setSaveError(
                 'This invoice number already exists. Please enter a different number.',
             )
@@ -358,7 +352,7 @@ export function InvoiceForm({
         )
 
         const invoice: Invoice = {
-            id: `inv-${Date.now()}`,
+            id: generateInvoiceId(),
             userId: 'demo-user',
             clientId: values.clientId,
             clientName: client.name,
@@ -544,7 +538,7 @@ export function InvoiceForm({
                                     className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground"
                                 >
                                     <option value="">Select a client</option>
-                                    {mockClients.map((client) => (
+                                    {clients.map((client) => (
                                         <option key={client.id} value={client.id}>
                                             {client.name}
                                         </option>
@@ -677,7 +671,7 @@ export function InvoiceForm({
                                     {...register('templateId')}
                                     className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground"
                                 >
-                                    {mockTemplates.map((template) => (
+                                    {templates.map((template) => (
                                         <option key={template.id} value={template.id}>
                                             {template.name} — {template.tone}
                                         </option>
@@ -788,7 +782,7 @@ export function InvoiceForm({
                                         </p>
 
                                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                            PDF, PNG, or JPG · Maximum 10MB
+                                            PDF, PNG, or JPG up to 10MB · Validated locally in this prototype (file storage requires cloud storage integration).
                                         </p>
 
                                         <input

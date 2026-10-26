@@ -2,7 +2,9 @@
 
 import { useState } from 'react'
 
-import type { ProfileInput } from '@/types'
+import { useProfile } from '@/lib/mock/use-mock-data'
+import { saveProfile } from '@/lib/mock/storage'
+import type { Profile, ProfileInput } from '@/types'
 
 const timezones = [
     'Asia/Dhaka',
@@ -14,30 +16,49 @@ const timezones = [
 
 const currencies = ['USD', 'BDT', 'EUR', 'GBP', 'CAD']
 
-export function SettingsForm() {
-    const [displayName, setDisplayName] = useState('Mahatab Hossan')
-    const [businessName, setBusinessName] = useState('Mahatab Studio')
-    const [timezone, setTimezone] = useState('Asia/Dhaka')
-    const [defaultCurrency, setDefaultCurrency] = useState('USD')
+interface SettingsFormFieldsProps {
+    initialProfile: Profile
+}
+
+function SettingsFormFields({ initialProfile }: SettingsFormFieldsProps) {
+    const [displayName, setDisplayName] = useState(initialProfile.displayName)
+    const [businessName, setBusinessName] = useState(
+        initialProfile.businessName ?? '',
+    )
+    const [timezone, setTimezone] = useState(initialProfile.timezone)
+    const [defaultCurrency, setDefaultCurrency] = useState(
+        initialProfile.defaultCurrency,
+    )
     const [saved, setSaved] = useState(false)
+    const [error, setError] = useState('')
 
     const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault()
+        setError('')
+
+        if (!displayName.trim()) {
+            setError('Display name is required.')
+            return
+        }
 
         const profileData: ProfileInput = {
-            displayName,
-            businessName,
+            displayName: displayName.trim(),
+            businessName: businessName.trim() || undefined,
             timezone,
             defaultCurrency,
         }
 
-        console.log('Update profile:', profileData)
+        try {
+            saveProfile(profileData)
+            setSaved(true)
 
-        setSaved(true)
-
-        window.setTimeout(() => {
-            setSaved(false)
-        }, 2500)
+            window.setTimeout(() => {
+                setSaved(false)
+            }, 2500)
+        } catch (err) {
+            console.error('Failed to save profile:', err)
+            setError('Failed to save profile settings.')
+        }
     }
 
     return (
@@ -134,6 +155,12 @@ export function SettingsForm() {
                     </select>
                 </div>
 
+                {error && (
+                    <p className="text-sm font-medium text-danger">
+                        {error}
+                    </p>
+                )}
+
                 <div className="flex flex-wrap items-center gap-4">
                     <button
                         type="submit"
@@ -151,4 +178,11 @@ export function SettingsForm() {
             </div>
         </form>
     )
+}
+
+export function SettingsForm() {
+    const profile = useProfile()
+    const formKey = `${profile.displayName}-${profile.businessName ?? ''}-${profile.timezone}-${profile.defaultCurrency}`
+
+    return <SettingsFormFields key={formKey} initialProfile={profile} />
 }

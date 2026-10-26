@@ -3,29 +3,30 @@
 import { Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
-import { mockClients } from '@/lib/mock/clients'
+import { useClients } from '@/lib/mock/use-mock-data'
 import { CurrencyText } from '@/components/shared/CurrencyText'
 import { ChannelIcons } from '@/components/shared/ChannelIcons'
 import { Input } from '@/components/ui/input'
 
 export function ClientList() {
     const [search, setSearch] = useState('')
+    const clients = useClients()
 
     const filteredClients = useMemo(() => {
         const query = search.trim().toLowerCase()
 
         if (!query) {
-            return mockClients
+            return clients
         }
 
-        return mockClients.filter((client) => {
+        return clients.filter((client) => {
             return (
                 client.name.toLowerCase().includes(query) ||
                 client.email?.toLowerCase().includes(query) ||
                 client.whatsappNumber?.includes(query)
             )
         })
-    }, [search])
+    }, [search, clients])
 
     return (
         <div className="space-y-4">
