@@ -98,6 +98,7 @@ const invoiceSchema = z
         },
     )
 
+type InvoiceFormInput = z.input<typeof invoiceSchema>
 type InvoiceFormValues = z.infer<typeof invoiceSchema>
 
 type InvoiceFormProps = {
@@ -198,7 +199,7 @@ export function InvoiceForm({
         setValue,
         control,
         formState: { errors, isSubmitting },
-    } = useForm<InvoiceFormValues>({
+    } = useForm<InvoiceFormInput, any, InvoiceFormValues>({
         resolver: zodResolver(invoiceSchema),
         defaultValues: {
             clientId: '',
