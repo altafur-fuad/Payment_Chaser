@@ -200,7 +200,7 @@ export function InvoiceForm({
         control,
         formState: { errors, isSubmitting },
     } = useForm<InvoiceFormInput, any, InvoiceFormValues>({
-        resolver: zodResolver(invoiceSchema),
+        resolver: zodResolver(invoiceSchema) as any,
         defaultValues: {
             clientId: '',
             invoiceNumber: '',
