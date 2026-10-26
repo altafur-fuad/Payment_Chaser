@@ -27,7 +27,7 @@ export const clientSchema = z
             .max(30, 'Phone number is too long.')
             .optional()
             .or(z.literal('')),
-        preferredChannel: z.enum(['email', 'whatsapp']),
+        preferredChannel: z.enum(['email', 'whatsapp', 'both']),
     })
     .refine(
         (data) => Boolean(data.email?.trim() || data.whatsappNumber?.trim()),
@@ -58,6 +58,18 @@ export const clientSchema = z
         {
             message: 'Email address is required when Email is the preferred channel.',
             path: ['email'],
+        }
+    )
+    .refine(
+        (data) => {
+            if (data.preferredChannel === 'both') {
+                return Boolean(data.email?.trim() && data.whatsappNumber?.trim())
+            }
+            return true
+        },
+        {
+            message: 'Both Email and WhatsApp number are required when Preferred Channel is Both.',
+            path: ['preferredChannel'],
         }
     )
 

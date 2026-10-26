@@ -16,7 +16,7 @@ import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 
 import { createClient } from '@/app/actions/clients'
-import type { ClientInput, ReminderChannel } from '@/types'
+import type { ClientInput } from '@/types'
 
 const clientSchema = z.object({
     name: z
@@ -37,7 +37,7 @@ const clientSchema = z.object({
         )
         .or(z.literal('')),
 
-    preferredChannel: z.enum(['email', 'whatsapp']),
+    preferredChannel: z.enum(['email', 'whatsapp', 'both']),
 })
 
 type ClientFormValues = z.infer<typeof clientSchema>
@@ -68,7 +68,7 @@ export function ClientForm() {
             name: values.name.trim(),
             email: values.email.trim() || undefined,
             whatsappNumber: values.whatsappNumber.trim() || undefined,
-            preferredChannel: values.preferredChannel as ReminderChannel,
+            preferredChannel: values.preferredChannel,
         }
 
         const res = await createClient(input)
@@ -235,6 +235,7 @@ export function ClientForm() {
                     >
                         <option value="email">Email</option>
                         <option value="whatsapp">WhatsApp</option>
+                        <option value="both">Both (Email & WhatsApp)</option>
                     </select>
 
                     {errors.preferredChannel && (

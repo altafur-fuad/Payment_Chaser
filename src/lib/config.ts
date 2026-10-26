@@ -7,7 +7,10 @@
  */
 
 export const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-export const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+export const SUPABASE_ANON_KEY =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    ''
 
 /**
  * Returns true if public Supabase environment variables are present and non-empty.
@@ -18,7 +21,8 @@ export function isSupabaseConfigured(): boolean {
         SUPABASE_URL.startsWith('http') &&
         !SUPABASE_URL.includes('your-project-id') &&
         SUPABASE_ANON_KEY &&
-        !SUPABASE_ANON_KEY.includes('your-anon-key')
+        !SUPABASE_ANON_KEY.includes('your-anon-key') &&
+        !SUPABASE_ANON_KEY.includes('your-publishable-key')
     )
 }
 

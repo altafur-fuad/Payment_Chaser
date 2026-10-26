@@ -33,6 +33,7 @@ export const INVOICE_STATUS_LABELS: Record<
     pending: 'Pending',
     paid: 'Paid',
     overdue: 'Overdue',
+    cancelled: 'Cancelled',
 }
 
 export const REMINDER_TONE_LABELS: Record<
@@ -52,11 +53,18 @@ export const REMINDER_CHANNEL_LABELS: Record<
     whatsapp: 'WhatsApp',
 }
 
+export const CLIENT_PREFERRED_CHANNEL_LABELS = {
+    email: 'Email',
+    whatsapp: 'WhatsApp',
+    both: 'Both (Email & WhatsApp)',
+} as const
+
 export const INVOICE_STATUS_OPTIONS = [
     { label: 'All', value: 'all' },
     { label: 'Pending', value: 'pending' },
     { label: 'Paid', value: 'paid' },
     { label: 'Overdue', value: 'overdue' },
+    { label: 'Cancelled', value: 'cancelled' },
 ] as const
 
 export const REMINDER_TONE_OPTIONS = [

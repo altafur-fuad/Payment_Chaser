@@ -8,11 +8,14 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { Bell, LogOut, Moon, Search, Sun } from 'lucide-react'
 import { getCurrentUser, logOut } from '@/app/actions/auth'
+
+const emptySubscribe = () => () => {}
 
 export function Topbar() {
     const { theme, setTheme } = useTheme()
@@ -22,6 +25,11 @@ export function Topbar() {
     const [userDisplayName, setUserDisplayName] = useState('User')
     const [userEmail, setUserEmail] = useState('')
     const [isLoggingOut, setIsLoggingOut] = useState(false)
+    const mounted = useSyncExternalStore(
+        emptySubscribe,
+        () => true,
+        () => false,
+    )
 
     useEffect(() => {
         getCurrentUser().then((res) => {
@@ -96,7 +104,9 @@ export function Topbar() {
                     aria-label="Toggle dark mode"
                     className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-slate-400 dark:hover:bg-slate-800"
                 >
-                    {theme === 'dark' ? (
+                    {!mounted ? (
+                        <span className="inline-block h-[18px] w-[18px]" aria-hidden="true" />
+                    ) : theme === 'dark' ? (
                         <Sun size={18} strokeWidth={2} />
                     ) : (
                         <Moon size={18} strokeWidth={2} />
@@ -105,16 +115,22 @@ export function Topbar() {
 
                 {/* Profile Badge & Info */}
                 <div className="ml-2 flex items-center gap-3">
-                    <div
-                        className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
-                        aria-label="User profile"
+                    <Link
+                        href="/settings"
+                        title="Go to settings"
+                        className="flex items-center gap-3 rounded-lg p-1 -m-1 transition hover:bg-slate-100 dark:hover:bg-slate-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                     >
-                        {initials}
-                    </div>
-                    <div className="hidden text-left md:block">
-                        <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{userDisplayName}</p>
-                        <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-[140px]">{userEmail || 'Active'}</p>
-                    </div>
+                        <div
+                            className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
+                            aria-label="User profile"
+                        >
+                            {initials}
+                        </div>
+                        <div className="hidden text-left md:block">
+                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{userDisplayName}</p>
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-[140px]">{userEmail || 'Active'}</p>
+                        </div>
+                    </Link>
 
                     <button
                         type="button"

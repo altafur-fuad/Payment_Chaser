@@ -42,7 +42,7 @@ export const invoiceSchema = z
 export type InvoiceInputValidated = z.infer<typeof invoiceSchema>
 
 export const invoiceFiltersSchema = z.object({
-    status: z.enum(['all', 'pending', 'paid', 'overdue']).optional().default('all'),
+    status: z.enum(['all', 'pending', 'paid', 'overdue', 'cancelled']).optional().default('all'),
     search: z.string().optional(),
     clientId: z.string().optional(),
     dateFrom: z.string().optional(),

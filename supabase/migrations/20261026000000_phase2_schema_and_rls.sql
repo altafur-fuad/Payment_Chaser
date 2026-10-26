@@ -45,10 +45,10 @@ create table if not exists public.clients (
   email text,
   whatsapp_number text,
   preferred_channel text not null default 'email'
-    check (preferred_channel in ('email', 'whatsapp')),
+    check (preferred_channel in ('email', 'whatsapp', 'both')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  check (email is not null or whatsapp_number is not null)
+  check ((email is not null or whatsapp_number is not null) and (preferred_channel != 'both' or (email is not null and whatsapp_number is not null)))
 );
 
 -- Unique index per user and email (allowing nulls)
@@ -100,7 +100,7 @@ create table if not exists public.invoices (
   issue_date date not null,
   due_date date not null,
   status text not null default 'pending'
-    check (status in ('pending', 'paid', 'overdue')),
+    check (status in ('pending', 'paid', 'overdue', 'cancelled')),
   channels text[] not null default '{email}',
   reminders_enabled boolean not null default true,
   file_path text,
@@ -353,6 +353,13 @@ create policy "invoices_insert_own"
       select 1 from public.clients c
       where c.id = client_id and c.user_id = auth.uid()
     )
+    and (
+      template_id is null
+      or exists (
+        select 1 from public.templates t
+        where t.id = template_id and t.user_id = auth.uid()
+      )
+    )
   );
 
 create policy "invoices_update_own"
@@ -363,6 +370,13 @@ create policy "invoices_update_own"
     and exists (
       select 1 from public.clients c
       where c.id = client_id and c.user_id = auth.uid()
+    )
+    and (
+      template_id is null
+      or exists (
+        select 1 from public.templates t
+        where t.id = template_id and t.user_id = auth.uid()
+      )
     )
   );
 
@@ -391,7 +405,13 @@ create policy "reminders_insert_own"
 create policy "reminders_update_own"
   on public.reminders for update
   using (user_id = auth.uid())
-  with check (user_id = auth.uid());
+  with check (
+    user_id = auth.uid()
+    and exists (
+      select 1 from public.invoices i
+      where i.id = invoice_id and i.user_id = auth.uid()
+    )
+  );
 
 create policy "reminders_delete_own"
   on public.reminders for delete
@@ -410,3 +430,28 @@ create policy "subscriptions_select_own"
 -- No policies defined for anon/authenticated: completely isolated.
 -- Only service role (bypassing RLS) can read/write webhook idempotency events.
 -- ------------------------------------------------------------
+
+-- ============================================================
+-- 12. Explicit Role Grants & Security Permissions
+-- ============================================================
+
+-- Deny all direct anonymous access to application tables
+revoke all on all tables in schema public from anon;
+revoke all on all sequences in schema public from anon;
+revoke all on all routines in schema public from anon;
+
+-- Grant standard usage to authenticated users and service_role
+grant usage on schema public to anon, authenticated, service_role;
+
+-- Authenticated users table permissions (governed by RLS)
+grant select, insert, update on public.profiles to authenticated;
+grant select, insert, update, delete on public.clients to authenticated;
+grant select, insert, update, delete on public.templates to authenticated;
+grant select, insert, update, delete on public.invoices to authenticated;
+grant select, insert, update, delete on public.reminders to authenticated;
+grant select on public.subscriptions to authenticated;
+
+-- Service role bypasses RLS and has full administrative control
+grant all on all tables in schema public to service_role;
+grant all on all sequences in schema public to service_role;
+grant all on all routines in schema public to service_role;

@@ -33,7 +33,7 @@ interface DbClientRow {
     name: string
     email: string | null
     whatsapp_number: string | null
-    preferred_channel: 'email' | 'whatsapp'
+    preferred_channel: 'email' | 'whatsapp' | 'both'
     created_at: string
     updated_at: string
 }

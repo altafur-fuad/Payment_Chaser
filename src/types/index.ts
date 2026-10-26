@@ -10,9 +10,11 @@
 // Core Enums (as string unions)
 // ============================================================
 
-export type InvoiceStatus = 'pending' | 'paid' | 'overdue'
+export type InvoiceStatus = 'pending' | 'paid' | 'overdue' | 'cancelled'
 
 export type ReminderChannel = 'email' | 'whatsapp'
+
+export type ClientPreferredChannel = 'email' | 'whatsapp' | 'both'
 
 export type ReminderTone = 'friendly' | 'firm' | 'urgent'
 
@@ -39,6 +41,7 @@ export interface Profile {
     timezone: string
     defaultCurrency: string
     createdAt: string
+    updatedAt?: string
 }
 
 export interface Client {
@@ -47,7 +50,7 @@ export interface Client {
     name: string
     email: string | null
     whatsappNumber: string | null
-    preferredChannel: ReminderChannel
+    preferredChannel: ClientPreferredChannel
     createdAt: string
     // Computed / joined fields (optional, present when listed with stats)
     invoiceCount?: number
@@ -167,7 +170,7 @@ export interface ClientInput {
     name: string
     email?: string
     whatsappNumber?: string
-    preferredChannel: ReminderChannel
+    preferredChannel: ClientPreferredChannel
 }
 
 export interface TemplateInput {

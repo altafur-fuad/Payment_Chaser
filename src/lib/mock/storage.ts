@@ -49,6 +49,22 @@ export const defaultProfile: Profile = {
 }
 
 // ----------------------------------------------------------------------
+// In-Memory Snapshot Caches for React useSyncExternalStore
+// ----------------------------------------------------------------------
+
+let cachedInvoices: Invoice[] | null = null
+let cachedInvoicesRaw: string | null = null
+
+let cachedClients: Client[] | null = null
+let cachedClientsRaw: string | null = null
+
+let cachedTemplates: Template[] | null = null
+let cachedTemplatesRaw: string | null = null
+
+let cachedProfile: Profile | null = null
+let cachedProfileRaw: string | null = null
+
+// ----------------------------------------------------------------------
 // Storage Event Dispatcher & Subscriber
 // ----------------------------------------------------------------------
 
@@ -109,10 +125,16 @@ export function getAllInvoices(): Invoice[] {
 
     try {
         const stored = localStorage.getItem(INVOICES_STORAGE_KEY)
+        if (stored !== null && stored === cachedInvoicesRaw && cachedInvoices !== null) {
+            return cachedInvoices
+        }
+
         if (stored) {
             const parsed = JSON.parse(stored)
             if (Array.isArray(parsed) && parsed.length > 0) {
-                return parsed as Invoice[]
+                cachedInvoicesRaw = stored
+                cachedInvoices = parsed as Invoice[]
+                return cachedInvoices
             }
         }
 
@@ -127,23 +149,29 @@ export function getAllInvoices(): Invoice[] {
                     ...legacyList,
                     ...mockInvoices.filter((inv) => !legacyIds.has(inv.id)),
                 ]
+                const serialized = JSON.stringify(combined)
                 localStorage.setItem(
                     INVOICES_STORAGE_KEY,
-                    JSON.stringify(combined),
+                    serialized,
                 )
+                cachedInvoicesRaw = serialized
+                cachedInvoices = combined
                 return combined
             }
         }
 
         // Initial seeding
+        const initial = JSON.stringify(mockInvoices)
         localStorage.setItem(
             INVOICES_STORAGE_KEY,
-            JSON.stringify(mockInvoices),
+            initial,
         )
+        cachedInvoicesRaw = initial
+        cachedInvoices = mockInvoices
         return mockInvoices
     } catch (error) {
         console.error('Failed to load invoices from localStorage:', error)
-        return mockInvoices
+        return cachedInvoices ?? mockInvoices
     }
 }
 
@@ -187,9 +215,12 @@ export function saveInvoice(invoice: Invoice): Invoice {
             updated = [invoice, ...currentInvoices]
         }
 
-        localStorage.setItem(INVOICES_STORAGE_KEY, JSON.stringify(updated))
+        const serialized = JSON.stringify(updated)
+        localStorage.setItem(INVOICES_STORAGE_KEY, serialized)
         // Maintain legacy key for any unmigrated component
-        localStorage.setItem(LEGACY_INVOICES_KEY, JSON.stringify(updated))
+        localStorage.setItem(LEGACY_INVOICES_KEY, serialized)
+        cachedInvoicesRaw = serialized
+        cachedInvoices = updated
         notifyStorageChange()
         return invoice
     } catch (error) {
@@ -221,14 +252,17 @@ export function deleteInvoice(id: string): boolean {
     try {
         const currentInvoices = getAllInvoices()
         const nextInvoices = currentInvoices.filter((item) => item.id !== id)
+        const serialized = JSON.stringify(nextInvoices)
         localStorage.setItem(
             INVOICES_STORAGE_KEY,
-            JSON.stringify(nextInvoices),
+            serialized,
         )
         localStorage.setItem(
             LEGACY_INVOICES_KEY,
-            JSON.stringify(nextInvoices),
+            serialized,
         )
+        cachedInvoicesRaw = serialized
+        cachedInvoices = nextInvoices
         notifyStorageChange()
         return true
     } catch (error) {
@@ -248,22 +282,31 @@ export function getAllClients(): Client[] {
 
     try {
         const stored = localStorage.getItem(CLIENTS_STORAGE_KEY)
+        if (stored !== null && stored === cachedClientsRaw && cachedClients !== null) {
+            return cachedClients
+        }
+
         if (stored) {
             const parsed = JSON.parse(stored)
             if (Array.isArray(parsed) && parsed.length > 0) {
-                return parsed as Client[]
+                cachedClientsRaw = stored
+                cachedClients = parsed as Client[]
+                return cachedClients
             }
         }
 
         // Initialize with default mock clients
+        const initial = JSON.stringify(mockClients)
         localStorage.setItem(
             CLIENTS_STORAGE_KEY,
-            JSON.stringify(mockClients),
+            initial,
         )
+        cachedClientsRaw = initial
+        cachedClients = mockClients
         return mockClients
     } catch (error) {
         console.error('Failed to load clients:', error)
-        return mockClients
+        return cachedClients ?? mockClients
     }
 }
 
@@ -290,7 +333,10 @@ export function saveClient(client: Client): Client {
             updated = [client, ...currentClients]
         }
 
-        localStorage.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(updated))
+        const serialized = JSON.stringify(updated)
+        localStorage.setItem(CLIENTS_STORAGE_KEY, serialized)
+        cachedClientsRaw = serialized
+        cachedClients = updated
         notifyStorageChange()
         return client
     } catch (error) {
@@ -326,22 +372,31 @@ export function getAllTemplates(): Template[] {
 
     try {
         const stored = localStorage.getItem(TEMPLATES_STORAGE_KEY)
+        if (stored !== null && stored === cachedTemplatesRaw && cachedTemplates !== null) {
+            return cachedTemplates
+        }
+
         if (stored) {
             const parsed = JSON.parse(stored)
             if (Array.isArray(parsed) && parsed.length > 0) {
-                return parsed as Template[]
+                cachedTemplatesRaw = stored
+                cachedTemplates = parsed as Template[]
+                return cachedTemplates
             }
         }
 
         // Initialize with default mock templates
+        const initial = JSON.stringify(mockTemplates)
         localStorage.setItem(
             TEMPLATES_STORAGE_KEY,
-            JSON.stringify(mockTemplates),
+            initial,
         )
+        cachedTemplatesRaw = initial
+        cachedTemplates = mockTemplates
         return mockTemplates
     } catch (error) {
         console.error('Failed to load templates:', error)
-        return mockTemplates
+        return cachedTemplates ?? mockTemplates
     }
 }
 
@@ -368,10 +423,13 @@ export function saveTemplate(template: Template): Template {
             updated = [...currentTemplates, template]
         }
 
+        const serialized = JSON.stringify(updated)
         localStorage.setItem(
             TEMPLATES_STORAGE_KEY,
-            JSON.stringify(updated),
+            serialized,
         )
+        cachedTemplatesRaw = serialized
+        cachedTemplates = updated
         notifyStorageChange()
         return template
     } catch (error) {
@@ -406,10 +464,13 @@ export function deleteTemplate(id: string): boolean {
         }
 
         const nextTemplates = currentTemplates.filter((t) => t.id !== id)
+        const serialized = JSON.stringify(nextTemplates)
         localStorage.setItem(
             TEMPLATES_STORAGE_KEY,
-            JSON.stringify(nextTemplates),
+            serialized,
         )
+        cachedTemplatesRaw = serialized
+        cachedTemplates = nextTemplates
         notifyStorageChange()
         return true
     } catch (error) {
@@ -429,18 +490,28 @@ export function getProfile(): Profile {
 
     try {
         const stored = localStorage.getItem(PROFILE_STORAGE_KEY)
-        if (stored) {
-            return JSON.parse(stored) as Profile
+        if (stored !== null && stored === cachedProfileRaw && cachedProfile !== null) {
+            return cachedProfile
         }
 
+        if (stored) {
+            const parsed = JSON.parse(stored) as Profile
+            cachedProfileRaw = stored
+            cachedProfile = parsed
+            return cachedProfile
+        }
+
+        const initial = JSON.stringify(defaultProfile)
         localStorage.setItem(
             PROFILE_STORAGE_KEY,
-            JSON.stringify(defaultProfile),
+            initial,
         )
+        cachedProfileRaw = initial
+        cachedProfile = defaultProfile
         return defaultProfile
     } catch (error) {
         console.error('Failed to load profile:', error)
-        return defaultProfile
+        return cachedProfile ?? defaultProfile
     }
 }
 
@@ -456,10 +527,13 @@ export function saveProfile(input: ProfileInput): Profile {
 
     if (typeof window !== 'undefined') {
         try {
+            const serialized = JSON.stringify(updated)
             localStorage.setItem(
                 PROFILE_STORAGE_KEY,
-                JSON.stringify(updated),
+                serialized,
             )
+            cachedProfileRaw = serialized
+            cachedProfile = updated
             notifyStorageChange()
         } catch (error) {
             console.error('Failed to save profile:', error)

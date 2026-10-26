@@ -90,7 +90,7 @@ export async function getDashboardStats(): Promise<Result<DashboardStats>> {
         const { count: remindersCount } = await supabase
             .from('reminders')
             .select('id', { count: 'exact', head: true })
-            .eq('status', 'sent')
+            .in('status', ['sent', 'delivered'])
             .gte('sent_at', weekAgo)
 
         return {

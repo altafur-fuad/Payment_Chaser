@@ -180,7 +180,7 @@ export function ClientList() {
 
                                         <td className="px-6 py-4">
                                             <ChannelIcons
-                                                channels={[client.preferredChannel]}
+                                                channels={client.preferredChannel === 'both' ? ['email', 'whatsapp'] : [client.preferredChannel]}
                                             />
                                         </td>
 

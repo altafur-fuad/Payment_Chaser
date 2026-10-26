@@ -11,6 +11,7 @@ import { INVOICE_STATUS_LABELS } from '@/lib/constants'
 import type { InvoiceStatus } from '@/types'
 import {
     AlertTriangle,
+    Ban,
     CheckCircle2,
     Clock,
 } from 'lucide-react'
@@ -34,6 +35,11 @@ const statusStyles = {
         className:
             'border-danger/30 bg-danger/10 text-danger',
         icon: AlertTriangle,
+    },
+    cancelled: {
+        className:
+            'border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400',
+        icon: Ban,
     },
 } as const
 

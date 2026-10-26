@@ -134,7 +134,11 @@ export function Sidebar() {
 
             <div className="shrink-0 border-t border-slate-800 p-4">
                 <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-800/60 p-3">
-                    <div className="flex items-center gap-3 min-w-0">
+                    <Link
+                        href="/settings"
+                        title="Go to settings"
+                        className="flex items-center gap-3 min-w-0 flex-1 rounded hover:opacity-85 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    >
                         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600/20 text-xs font-semibold text-blue-300">
                             {initials}
                         </div>
@@ -147,7 +151,7 @@ export function Sidebar() {
                                 {userEmail || 'Active'}
                             </p>
                         </div>
-                    </div>
+                    </Link>
 
                     <button
                         type="button"
