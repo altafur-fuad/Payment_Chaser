@@ -1,13 +1,21 @@
 'use client'
 
+/**
+ * @file src/app/clients/new/ClientForm.tsx
+ * @description Form to add a new client connected to createClient Server Action.
+ * @phase 2
+ * @author Payment Chaser Team
+ * @created 2026-10-01
+ */
+
 import { useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CheckCircle2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 
-import { createClient } from '@/lib/mock/storage'
+import { createClient } from '@/app/actions/clients'
 import type { ClientInput, ReminderChannel } from '@/types'
 
 const clientSchema = z.object({
@@ -36,6 +44,7 @@ type ClientFormValues = z.infer<typeof clientSchema>
 
 export function ClientForm() {
     const [submitted, setSubmitted] = useState(false)
+    const [serverError, setServerError] = useState<string | null>(null)
 
     const {
         register,
@@ -53,25 +62,28 @@ export function ClientForm() {
     })
 
     const onSubmit = async (values: ClientFormValues) => {
+        setServerError(null)
+
         const input: ClientInput = {
             name: values.name.trim(),
             email: values.email.trim() || undefined,
-            whatsappNumber:
-                values.whatsappNumber.trim() || undefined,
+            whatsappNumber: values.whatsappNumber.trim() || undefined,
             preferredChannel: values.preferredChannel as ReminderChannel,
         }
 
-        try {
-            createClient(input)
-            setSubmitted(true)
-        } catch (error) {
-            console.error('Failed to create client:', error)
+        const res = await createClient(input)
+
+        if (!res.ok) {
+            setServerError(res.error)
+            return
         }
+
+        setSubmitted(true)
     }
 
     if (submitted) {
         return (
-            <div className="rounded-lg border border-border bg-card p-8 text-center">
+            <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
                 <CheckCircle2
                     size={48}
                     className="mx-auto text-emerald-500"
@@ -83,32 +95,33 @@ export function ClientForm() {
                 </h2>
 
                 <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-                    The client has been added to your client list.
+                    The client has been added to your database and is available for invoicing.
                 </p>
 
                 <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
                     <Link
                         href="/clients"
-                        className="inline-flex min-h-10 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                         Back to Clients
                     </Link>
 
                     <button
-    type="button"
-    onClick={() => {
-        reset({
-            name: '',
-            email: '',
-            whatsappNumber: '',
-            preferredChannel: 'email',
-        })
-        setSubmitted(false)
-    }}
-    className="inline-flex min-h-10 items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-slate-50 dark:hover:bg-slate-900"
->
-    Add Another Client
-</button>
+                        type="button"
+                        onClick={() => {
+                            reset({
+                                name: '',
+                                email: '',
+                                whatsappNumber: '',
+                                preferredChannel: 'email',
+                            })
+                            setSubmitted(false)
+                            setServerError(null)
+                        }}
+                        className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border bg-background px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
+                    >
+                        Add Another Client
+                    </button>
                 </div>
             </div>
         )
@@ -117,27 +130,45 @@ export function ClientForm() {
     return (
         <form
             onSubmit={handleSubmit(onSubmit)}
-            className="max-w-2xl space-y-6 rounded-lg border border-border bg-card p-6 md:p-8"
+            className="space-y-6 rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8"
         >
-            <div className="space-y-5">
+            <Link
+                href="/clients"
+                className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400"
+            >
+                <ArrowLeft size={16} />
+                Back to clients
+            </Link>
+
+            {serverError && (
+                <div
+                    role="alert"
+                    className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+                >
+                    <AlertCircle size={18} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
+                    <span>{serverError}</span>
+                </div>
+            )}
+
+            <div className="space-y-4">
                 <div>
                     <label
                         htmlFor="name"
-                        className="mb-2 block text-sm font-medium text-foreground"
+                        className="block text-sm font-medium text-foreground"
                     >
-                        Client Name
+                        Client Name <span className="text-red-500">*</span>
                     </label>
 
                     <input
+                        {...register('name')}
                         id="name"
                         type="text"
-                        placeholder="e.g. John Doe"
-                        {...register('name')}
-                        className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-primary"
+                        placeholder="Acme Corp or Jane Doe"
+                        className="mt-2 flex h-11 w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-primary"
                     />
 
                     {errors.name && (
-                        <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                        <p className="mt-1 text-xs text-red-500">
                             {errors.name.message}
                         </p>
                     )}
@@ -146,21 +177,21 @@ export function ClientForm() {
                 <div>
                     <label
                         htmlFor="email"
-                        className="mb-2 block text-sm font-medium text-foreground"
+                        className="block text-sm font-medium text-foreground"
                     >
-                        Email
+                        Email Address
                     </label>
 
                     <input
+                        {...register('email')}
                         id="email"
                         type="email"
-                        placeholder="client@example.com"
-                        {...register('email')}
-                        className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-primary"
+                        placeholder="billing@acmecorp.com"
+                        className="mt-2 flex h-11 w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-primary"
                     />
 
                     {errors.email && (
-                        <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                        <p className="mt-1 text-xs text-red-500">
                             {errors.email.message}
                         </p>
                     )}
@@ -169,21 +200,21 @@ export function ClientForm() {
                 <div>
                     <label
                         htmlFor="whatsappNumber"
-                        className="mb-2 block text-sm font-medium text-foreground"
+                        className="block text-sm font-medium text-foreground"
                     >
                         WhatsApp Number
                     </label>
 
                     <input
+                        {...register('whatsappNumber')}
                         id="whatsappNumber"
                         type="tel"
-                        placeholder="+8801712345678"
-                        {...register('whatsappNumber')}
-                        className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-primary"
+                        placeholder="+1 555 123 4567"
+                        className="mt-2 flex h-11 w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-primary"
                     />
 
                     {errors.whatsappNumber && (
-                        <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                        <p className="mt-1 text-xs text-red-500">
                             {errors.whatsappNumber.message}
                         </p>
                     )}
@@ -192,43 +223,42 @@ export function ClientForm() {
                 <div>
                     <label
                         htmlFor="preferredChannel"
-                        className="mb-2 block text-sm font-medium text-foreground"
+                        className="block text-sm font-medium text-foreground"
                     >
                         Preferred Reminder Channel
                     </label>
 
                     <select
-                        id="preferredChannel"
                         {...register('preferredChannel')}
-                        className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-primary"
+                        id="preferredChannel"
+                        className="mt-2 flex h-11 w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-primary"
                     >
                         <option value="email">Email</option>
                         <option value="whatsapp">WhatsApp</option>
                     </select>
 
                     {errors.preferredChannel && (
-                        <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                        <p className="mt-1 text-xs text-red-500">
                             {errors.preferredChannel.message}
                         </p>
                     )}
                 </div>
             </div>
 
-            <div className="flex flex-col-reverse gap-3 border-t border-border pt-6 sm:flex-row sm:justify-end">
+            <div className="flex justify-end gap-3 pt-4 border-t border-border">
                 <Link
                     href="/clients"
-                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-slate-50 dark:hover:bg-slate-900"
+                    className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border bg-background px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
                 >
-                    <ArrowLeft size={17} aria-hidden="true" />
                     Cancel
                 </Link>
 
                 <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="inline-flex min-h-10 items-center justify-center rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60"
                 >
-                    {isSubmitting ? 'Saving...' : 'Save Client'}
+                    {isSubmitting ? 'Saving Client...' : 'Create Client'}
                 </button>
             </div>
         </form>

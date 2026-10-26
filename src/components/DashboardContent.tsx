@@ -5,9 +5,10 @@
  * @description Dynamic Payment Chaser dashboard overview backed by unified mock storage.
  */
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
+    AlertCircle,
     ArrowDownRight,
     ArrowUpRight,
     BellRing,
@@ -16,10 +17,19 @@ import {
     CreditCard,
     FilePlus2,
     LayoutDashboard,
+    RefreshCw,
 } from 'lucide-react'
 
+import {
+    getDashboardStats,
+    getNeedsAttention,
+    getUpcomingInvoices,
+    getRecentActivity,
+} from '@/app/actions/dashboard'
 import { useInvoices } from '@/lib/mock/use-mock-data'
-import { calculateDashboardStats } from '@/lib/mock/storage'
+import { calculateDashboardStats, type ReminderActivityItem } from '@/lib/mock/storage'
+import { USE_MOCK, isSupabaseConfigured } from '@/lib/config'
+import type { DashboardStats, NeedsAttentionItem, UpcomingInvoice } from '@/types'
 import { NeedsAttention } from '@/components/NeedsAttention'
 import { UpcomingInvoices } from '@/components/UpcomingInvoices'
 import { RecentReminders } from '@/components/RecentReminders'
@@ -37,18 +47,87 @@ function formatCurrency(amount: number, currency: string = 'USD'): string {
 }
 
 export function DashboardContent() {
-    const invoices = useInvoices()
-    const statsData = useMemo(
-        () => calculateDashboardStats(invoices),
-        [invoices],
+    const isMockLocal = USE_MOCK && !isSupabaseConfigured()
+    const mockInvoices = useInvoices()
+    const mockStatsData = useMemo(
+        () => calculateDashboardStats(mockInvoices),
+        [mockInvoices],
     )
+
+    const [statsData, setStatsData] = useState<DashboardStats | null>(null)
+    const [attentionItems, setAttentionItems] = useState<NeedsAttentionItem[]>([])
+    const [upcomingItems, setUpcomingItems] = useState<UpcomingInvoice[]>([])
+    const [recentActivity, setRecentActivity] = useState<ReminderActivityItem[]>([])
+    const [loading, setLoading] = useState(!isMockLocal)
+    const [error, setError] = useState<string | null>(null)
+
+    const [refreshTrigger, setRefreshTrigger] = useState(0)
+
+    useEffect(() => {
+        if (isMockLocal) return
+
+        let isCancelled = false
+
+        Promise.all([
+            getDashboardStats(),
+            getNeedsAttention(),
+            getUpcomingInvoices(),
+            getRecentActivity(),
+        ])
+            .then(([statsRes, attentionRes, upcomingRes, activityRes]) => {
+                if (isCancelled) return
+                setLoading(false)
+
+                if (statsRes.ok) setStatsData(statsRes.data)
+                if (attentionRes.ok) setAttentionItems(attentionRes.data)
+                if (upcomingRes.ok) setUpcomingItems(upcomingRes.data)
+                if (activityRes.ok) setRecentActivity(activityRes.data)
+
+                if (
+                    !statsRes.ok ||
+                    !attentionRes.ok ||
+                    !upcomingRes.ok ||
+                    !activityRes.ok
+                ) {
+                    setError('Some dashboard data could not be retrieved.')
+                }
+            })
+            .catch((err: unknown) => {
+                if (isCancelled) return
+                setLoading(false)
+                setError(
+                    err instanceof Error
+                        ? err.message
+                        : 'Failed to retrieve dashboard data.'
+                )
+            })
+
+        return () => {
+            isCancelled = true
+        }
+    }, [isMockLocal, refreshTrigger])
+
+    const activeStats: DashboardStats = useMemo(() => {
+        if (isMockLocal) {
+            return mockStatsData
+        }
+        return (
+            statsData || {
+                totalOutstanding: 0,
+                totalOverdue: 0,
+                paidThisMonth: 0,
+                remindersSentThisWeek: 0,
+                currency: 'USD',
+            }
+        )
+    }, [isMockLocal, mockStatsData, statsData])
 
     const stats = [
         {
             label: 'Total Outstanding',
             value: formatCurrency(
-                statsData.totalOutstanding,
-                statsData.currency,
+                activeStats.totalOutstanding,
+                activeStats.currency,
             ),
             description: 'Unpaid invoice amount',
             icon: CircleDollarSign,
@@ -60,7 +139,7 @@ export function DashboardContent() {
         },
         {
             label: 'Total Overdue',
-            value: formatCurrency(statsData.totalOverdue, statsData.currency),
+            value: formatCurrency(activeStats.totalOverdue, activeStats.currency),
             description: 'Past due invoice amount',
             icon: Clock3,
             iconStyle:
@@ -71,7 +150,7 @@ export function DashboardContent() {
         },
         {
             label: 'Paid This Month',
-            value: formatCurrency(statsData.paidThisMonth, statsData.currency),
+            value: formatCurrency(activeStats.paidThisMonth, activeStats.currency),
             description: 'Payments received this month',
             icon: CreditCard,
             iconStyle:
@@ -82,12 +161,12 @@ export function DashboardContent() {
         },
         {
             label: 'Reminders Sent',
-            value: statsData.remindersSentThisWeek.toString(),
-            description: 'Total reminders sent',
+            value: activeStats.remindersSentThisWeek.toString(),
+            description: 'Total reminders sent this week',
             icon: BellRing,
             iconStyle:
                 'bg-amber-50 text-amber-600 ring-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/20',
-            trend: 'Reminders logged',
+            trend: 'Active follow-ups',
             trendStyle: 'text-amber-700 dark:text-amber-400',
             trendIcon: ArrowDownRight,
         },
@@ -129,6 +208,30 @@ export function DashboardContent() {
                 </div>
             </header>
 
+            {/* Error Banner */}
+            {error && (
+                <div
+                    role="alert"
+                    className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+                >
+                    <div className="flex items-center gap-3">
+                        <AlertCircle size={20} className="shrink-0 text-red-600 dark:text-red-400" />
+                        <span>{error}</span>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setLoading(true)
+                            setRefreshTrigger((prev) => prev + 1)
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-800 transition hover:bg-red-200 dark:bg-red-900/50 dark:text-red-200 dark:hover:bg-red-900"
+                    >
+                        <RefreshCw size={13} />
+                        Retry
+                    </button>
+                </div>
+            )}
+
             {/* Statistics */}
             <section aria-label="Payment statistics" className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
@@ -136,9 +239,17 @@ export function DashboardContent() {
                         Financial summary
                     </h2>
 
-                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                        All invoices ({invoices.length})
-                    </span>
+                    <div className="flex items-center gap-2">
+                        {loading && (
+                            <span className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                                <RefreshCw size={12} className="animate-spin text-blue-500" />
+                                Updating...
+                            </span>
+                        )}
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                            {isMockLocal ? `Demo mode (${mockInvoices.length} invoices)` : 'Live database'}
+                        </span>
+                    </div>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -158,7 +269,11 @@ export function DashboardContent() {
                                         </p>
 
                                         <p className="mt-3 break-words text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl dark:text-slate-100">
-                                            {stat.value}
+                                            {loading ? (
+                                                <span className="inline-block h-8 w-24 animate-pulse rounded bg-slate-200 dark:bg-slate-800" />
+                                            ) : (
+                                                stat.value
+                                            )}
                                         </p>
                                     </div>
 
@@ -196,12 +311,21 @@ export function DashboardContent() {
                 className="grid items-start gap-6 xl:grid-cols-2"
             >
                 <div className="min-w-0 space-y-6">
-                    <NeedsAttention invoices={invoices} />
-                    <UpcomingInvoices invoices={invoices} />
+                    <NeedsAttention
+                        items={isMockLocal ? undefined : attentionItems}
+                        invoices={isMockLocal ? mockInvoices : undefined}
+                    />
+                    <UpcomingInvoices
+                        items={isMockLocal ? undefined : upcomingItems}
+                        invoices={isMockLocal ? mockInvoices : undefined}
+                    />
                 </div>
 
                 <div className="min-w-0">
-                    <RecentReminders invoices={invoices} />
+                    <RecentReminders
+                        items={isMockLocal ? undefined : recentActivity}
+                        invoices={isMockLocal ? mockInvoices : undefined}
+                    />
                 </div>
             </section>
 

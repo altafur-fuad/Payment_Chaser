@@ -1,17 +1,16 @@
 /**
  * @file src/app/invoices/InvoiceList.tsx
- * @description Interactive invoice list with search and status filters.
- * @phase 5
+ * @description Interactive invoice list with Server Action query, search, and status filters.
+ * @phase 2
  * @author Payment Chaser Team
  * @created 2026-10-04
  */
 
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-    CalendarDays,
     ChevronLeft,
     ChevronRight,
     Eye,
@@ -21,7 +20,10 @@ import {
     X,
 } from 'lucide-react'
 
+import { getInvoices } from '@/app/actions/invoices'
 import { useInvoices } from '@/lib/mock/use-mock-data'
+import { USE_MOCK, isSupabaseConfigured } from '@/lib/config'
+import type { InvoiceListResult } from '@/types'
 
 const PAGE_SIZE = 6
 
@@ -71,51 +73,92 @@ function getStatusLabel(status: string): string {
 }
 
 export function InvoiceList() {
-    const invoices = useInvoices()
+    const isMockLocal = USE_MOCK && !isSupabaseConfigured()
+    const mockStoreInvoices = useInvoices()
+
     const [search, setSearch] = useState('')
-    const [statusFilter, setStatusFilter] =
-        useState<StatusFilter>('all')
-    const [dateFilter, setDateFilter] =
-        useState<DateFilter>('all')
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+    const [dateFilter, setDateFilter] = useState<DateFilter>('all')
     const [currentPage, setCurrentPage] = useState(1)
 
-    const counts = useMemo(() => {
-        return {
-            all: invoices.length,
-            pending: invoices.filter(
-                (invoice) => invoice.status === 'pending',
-            ).length,
-            paid: invoices.filter(
-                (invoice) => invoice.status === 'paid',
-            ).length,
-            overdue: invoices.filter(
-                (invoice) => invoice.status === 'overdue',
-            ).length,
+    const [dbResult, setDbResult] = useState<InvoiceListResult | null>(null)
+    const [loading, setLoading] = useState(!isMockLocal)
+    const [fetchError, setFetchError] = useState<string | null>(null)
+
+    // Query database via Server Action when connected
+    useEffect(() => {
+        if (isMockLocal) return
+
+        let isCancelled = false
+
+        getInvoices({
+            status: statusFilter,
+            search: search.trim() || undefined,
+            page: currentPage,
+            pageSize: PAGE_SIZE,
+        }).then((res) => {
+            if (isCancelled) return
+            setLoading(false)
+            if (res.ok) {
+                setDbResult(res.data)
+            } else {
+                setFetchError(res.error)
+            }
+        })
+
+        return () => {
+            isCancelled = true
         }
-    }, [invoices])
+    }, [isMockLocal, search, statusFilter, currentPage])
+
+    // Fallback/compute for mock local mode
+    const invoices = useMemo(() => {
+        if (isMockLocal) {
+            return mockStoreInvoices
+        }
+        return dbResult?.items || []
+    }, [isMockLocal, mockStoreInvoices, dbResult])
+
+    const counts = useMemo(() => {
+        if (isMockLocal) {
+            return {
+                all: mockStoreInvoices.length,
+                pending: mockStoreInvoices.filter((i) => i.status === 'pending').length,
+                paid: mockStoreInvoices.filter((i) => i.status === 'paid').length,
+                overdue: mockStoreInvoices.filter((i) => i.status === 'overdue').length,
+            }
+        }
+        return (
+            dbResult?.counts || {
+                all: 0,
+                pending: 0,
+                paid: 0,
+                overdue: 0,
+            }
+        )
+    }, [isMockLocal, mockStoreInvoices, dbResult])
 
     const filteredInvoices = useMemo(() => {
+        if (!isMockLocal) {
+            return invoices
+        }
+
         const normalizedSearch = search.trim().toLowerCase()
         const now = new Date()
 
-        return invoices.filter((invoice) => {
+        return mockStoreInvoices.filter((invoice) => {
             const matchesSearch =
                 !normalizedSearch ||
-                invoice.invoiceNumber
-                    .toLowerCase()
-                    .includes(normalizedSearch) ||
-                invoice.clientName
-                    .toLowerCase()
-                    .includes(normalizedSearch) ||
+                invoice.invoiceNumber.toLowerCase().includes(normalizedSearch) ||
+                invoice.clientName.toLowerCase().includes(normalizedSearch) ||
                 invoice.id.toLowerCase().includes(normalizedSearch) ||
                 String(invoice.amount).includes(normalizedSearch)
 
             const matchesStatus =
-                statusFilter === 'all' ||
-                invoice.status === statusFilter
+                statusFilter === 'all' || invoice.status === statusFilter
 
             const issueDate = new Date(
-                `${invoice.issueDate.slice(0, 10)}T00:00:00`,
+                `${invoice.issueDate.slice(0, 10)}T00:00:00`
             )
 
             const matchesDate =
@@ -125,33 +168,27 @@ export function InvoiceList() {
 
             return matchesSearch && matchesStatus && matchesDate
         })
-    }, [invoices, search, statusFilter, dateFilter])
+    }, [isMockLocal, mockStoreInvoices, invoices, search, statusFilter, dateFilter])
 
-    const totalPages = Math.max(
-        1,
-        Math.ceil(filteredInvoices.length / PAGE_SIZE),
-    )
+    const totalPages = isMockLocal
+        ? Math.max(1, Math.ceil(filteredInvoices.length / PAGE_SIZE))
+        : Math.max(1, Math.ceil((dbResult?.total || 0) / PAGE_SIZE))
 
     const safePage = Math.min(currentPage, totalPages)
 
     const paginatedInvoices = useMemo(() => {
+        if (!isMockLocal) {
+            return invoices
+        }
         const startIndex = (safePage - 1) * PAGE_SIZE
+        return filteredInvoices.slice(startIndex, startIndex + PAGE_SIZE)
+    }, [isMockLocal, invoices, filteredInvoices, safePage])
 
-        return filteredInvoices.slice(
-            startIndex,
-            startIndex + PAGE_SIZE,
-        )
-    }, [filteredInvoices, safePage])
-
-    const startItem =
-        filteredInvoices.length === 0
-            ? 0
-            : (safePage - 1) * PAGE_SIZE + 1
-
-    const endItem = Math.min(
-        safePage * PAGE_SIZE,
-        filteredInvoices.length,
-    )
+    const totalCount = isMockLocal ? filteredInvoices.length : dbResult?.total || 0
+    const startItem = totalCount === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1
+    const endItem = isMockLocal
+        ? Math.min(safePage * PAGE_SIZE, filteredInvoices.length)
+        : Math.min(safePage * PAGE_SIZE, totalCount)
 
     function clearFilters() {
         setSearch('')
@@ -245,107 +282,70 @@ export function InvoiceList() {
                 </button>
             </div>
 
-            {/* Search and filters */}
-            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:items-center">
-                <div className="relative min-w-0 flex-1">
+            {/* Controls */}
+            <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900">
+                <div className="relative flex-1">
                     <Search
-                        size={18}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                        size={17}
+                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                     />
                     <input
-                        type="search"
+                        type="text"
                         value={search}
-                        onChange={(event) => {
-                            setSearch(event.target.value)
+                        onChange={(e) => {
+                            setSearch(e.target.value)
                             setCurrentPage(1)
                         }}
-                        placeholder="Search invoice or client..."
-                        aria-label="Search invoices"
-                        className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                        placeholder="Search by invoice #, client, or amount..."
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-8 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500"
                     />
-                </div>
-
-                <div className="flex flex-col gap-3 sm:flex-row">
-                    <div className="relative">
-                        <select
-                            value={statusFilter}
-                            onChange={(event) => {
-                                setStatusFilter(
-                                    event.target.value as StatusFilter,
-                                )
-                                setCurrentPage(1)
-                            }}
-                            aria-label="Filter by status"
-                            className="h-11 w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 pr-9 text-sm text-slate-700 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 sm:w-40"
-                        >
-                            <option value="all">All statuses</option>
-                            <option value="pending">Pending</option>
-                            <option value="paid">Paid</option>
-                            <option value="overdue">Overdue</option>
-                        </select>
-                    </div>
-
-                    <div className="relative">
-                        <CalendarDays
-                            size={16}
-                            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                        />
-                        <select
-                            value={dateFilter}
-                            onChange={(event) => {
-                                setDateFilter(
-                                    event.target.value as DateFilter,
-                                )
-                                setCurrentPage(1)
-                            }}
-                            aria-label="Filter by issue date"
-                            className="h-11 w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 sm:w-40"
-                        >
-                            <option value="all">All dates</option>
-                            <option value="this-month">This month</option>
-                        </select>
-                    </div>
-
-                    {(search ||
-                        statusFilter !== 'all' ||
-                        dateFilter !== 'all') && (
+                    {search && (
                         <button
                             type="button"
-                            onClick={clearFilters}
-                            className="inline-flex h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                            onClick={() => setSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                         >
-                            <X size={16} />
-                            Clear
+                            <X size={15} />
                         </button>
                     )}
                 </div>
-            </div>
 
-            {/* Invoice table */}
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-                <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                    <div>
-                        <h2 className="font-semibold text-slate-900 dark:text-white">
-                            Invoice list
-                        </h2>
-                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                            Track invoices and outstanding payments.
-                        </p>
-                    </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <select
+                        value={dateFilter}
+                        onChange={(e) => {
+                            setDateFilter(e.target.value as DateFilter)
+                            setCurrentPage(1)
+                        }}
+                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    >
+                        <option value="all">All dates</option>
+                        <option value="this-month">This month</option>
+                    </select>
 
                     <Link
                         href="/invoices/new"
-                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900"
+                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                     >
-                        <Plus size={17} />
-                        New Invoice
+                        <Plus size={16} />
+                        <span>Create invoice</span>
                     </Link>
                 </div>
+            </div>
 
+            {/* Error notice */}
+            {fetchError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+                    {fetchError}
+                </div>
+            )}
+
+            {/* Invoices Table */}
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <div className="overflow-x-auto">
-                    <table className="w-full min-w-[900px] text-left">
-                        <thead className="bg-slate-50 dark:bg-slate-950/60">
-                            <tr className="border-b border-slate-200 dark:border-slate-800">
+                    <table className="w-full text-left text-sm">
+                        <thead className="border-b border-slate-200 bg-slate-50/75 dark:border-slate-800 dark:bg-slate-800/50">
+                            <tr>
                                 <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                     Invoice
                                 </th>
@@ -371,171 +371,161 @@ export function InvoiceList() {
                         </thead>
 
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                            {paginatedInvoices.map((invoice) => (
-                                <tr
-                                    key={invoice.id}
-                                    className="transition hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
-                                >
-                                    <td className="whitespace-nowrap px-5 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
-                                                <FileText size={18} />
-                                            </div>
-                                            <div>
-                                                <p className="font-semibold text-slate-900 dark:text-white">
-                                                    {invoice.invoiceNumber}
-                                                </p>
-                                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                                    Issued{' '}
-                                                    {formatDate(invoice.issueDate)}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    <td className="whitespace-nowrap px-5 py-4">
-                                        <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                                            {invoice.clientName || 'Unknown client'}
-                                        </span>
-                                    </td>
-
-                                    <td className="whitespace-nowrap px-5 py-4">
-                                        <span className="text-sm font-semibold text-slate-900 dark:text-white">
-                                            {formatAmount(
-                                                invoice.amount,
-                                                invoice.currency,
-                                            )}
-                                        </span>
-                                    </td>
-
-                                    <td className="whitespace-nowrap px-5 py-4">
-                                        <span className="text-sm text-slate-600 dark:text-slate-300">
-                                            {formatDate(invoice.dueDate)}
-                                        </span>
-                                    </td>
-
-                                    <td className="whitespace-nowrap px-5 py-4">
-                                        <span
-                                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(invoice.status)}`}
-                                        >
-                                            {getStatusLabel(invoice.status)}
-                                        </span>
-                                    </td>
-
-                                    <td className="px-5 py-4">
-                                        <div className="flex max-w-40 flex-wrap gap-1.5">
-                                            {invoice.channels?.length ? (
-                                                invoice.channels.map(
-                                                    (channel, index) => (
-                                                        <span
-                                                            key={`${invoice.id}-${channel}-${index}`}
-                                                            className="inline-flex rounded-md bg-slate-100 px-2 py-1 text-xs font-medium capitalize text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                                                        >
-                                                            {String(channel)}
-                                                        </span>
-                                                    ),
-                                                )
-                                            ) : (
-                                                <span className="text-xs text-slate-400">
-                                                    —
-                                                </span>
-                                            )}
-                                        </div>
-                                    </td>
-
-                                    <td className="whitespace-nowrap px-5 py-4 text-right">
-                                        <Link
-                                            href={`/invoices/${invoice.id}`}
-                                            aria-label={`View invoice ${invoice.invoiceNumber}`}
-                                            title="View invoice"
-                                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 dark:border-slate-700 dark:text-slate-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-400"
-                                        >
-                                            <Eye size={17} />
-                                        </Link>
-                                    </td>
-                                </tr>
-                            ))}
-
-                            {paginatedInvoices.length === 0 && (
+                            {loading ? (
                                 <tr>
-                                    <td
-                                        colSpan={7}
-                                        className="px-5 py-14 text-center"
-                                    >
-                                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                                            <Search
-                                                size={21}
-                                                className="text-slate-400"
-                                            />
-                                        </div>
-                                        <h3 className="mt-3 text-sm font-semibold text-slate-900 dark:text-white">
-                                            No invoices found
-                                        </h3>
-                                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                                            Try changing your search or filters.
-                                        </p>
-                                        <button
-                                            type="button"
-                                            onClick={clearFilters}
-                                            className="mt-4 text-sm font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
-                                        >
-                                            Clear filters
-                                        </button>
+                                    <td colSpan={7} className="p-8 text-center text-slate-500">
+                                        Loading invoices...
                                     </td>
                                 </tr>
+                            ) : paginatedInvoices.length === 0 ? (
+                                <tr>
+                                    <td colSpan={7} className="p-12 text-center">
+                                        <FileText
+                                            size={36}
+                                            className="mx-auto text-slate-300 dark:text-slate-600"
+                                        />
+                                        <p className="mt-3 font-semibold text-slate-900 dark:text-white">
+                                            No invoices found
+                                        </p>
+                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                            {search || statusFilter !== 'all'
+                                                ? 'Try clearing your search or status filters.'
+                                                : 'Get started by creating your first invoice.'}
+                                        </p>
+                                        {(search || statusFilter !== 'all') && (
+                                            <button
+                                                type="button"
+                                                onClick={clearFilters}
+                                                className="mt-3 text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400"
+                                            >
+                                                Reset all filters
+                                            </button>
+                                        )}
+                                    </td>
+                                </tr>
+                            ) : (
+                                paginatedInvoices.map((invoice) => (
+                                    <tr
+                                        key={invoice.id}
+                                        className="transition hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
+                                    >
+                                        <td className="whitespace-nowrap px-5 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+                                                    <FileText size={18} />
+                                                </div>
+                                                <div>
+                                                    <p className="font-semibold text-slate-900 dark:text-white">
+                                                        {invoice.invoiceNumber}
+                                                    </p>
+                                                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                                        Issued{' '}
+                                                        {formatDate(invoice.issueDate)}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </td>
+
+                                        <td className="whitespace-nowrap px-5 py-4">
+                                            <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                                                {invoice.clientName || 'Unknown client'}
+                                            </span>
+                                        </td>
+
+                                        <td className="whitespace-nowrap px-5 py-4">
+                                            <span className="text-sm font-semibold text-slate-900 dark:text-white">
+                                                {formatAmount(
+                                                    invoice.amount,
+                                                    invoice.currency
+                                                )}
+                                            </span>
+                                        </td>
+
+                                        <td className="whitespace-nowrap px-5 py-4">
+                                            <span className="text-sm text-slate-600 dark:text-slate-300">
+                                                {formatDate(invoice.dueDate)}
+                                            </span>
+                                        </td>
+
+                                        <td className="whitespace-nowrap px-5 py-4">
+                                            <span
+                                                className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(
+                                                    invoice.status
+                                                )}`}
+                                            >
+                                                {getStatusLabel(invoice.status)}
+                                            </span>
+                                        </td>
+
+                                        <td className="px-5 py-4">
+                                            <div className="flex max-w-40 flex-wrap gap-1.5">
+                                                {invoice.channels?.length ? (
+                                                    invoice.channels.map(
+                                                        (channel, index) => (
+                                                            <span
+                                                                key={`${invoice.id}-${channel}-${index}`}
+                                                                className="inline-flex rounded-md bg-slate-100 px-2 py-1 text-xs font-medium capitalize text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                                                            >
+                                                                {String(channel)}
+                                                            </span>
+                                                        )
+                                                    )
+                                                ) : (
+                                                    <span className="text-xs text-slate-400">
+                                                        —
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
+
+                                        <td className="whitespace-nowrap px-5 py-4 text-right">
+                                            <Link
+                                                href={`/invoices/${invoice.id}`}
+                                                aria-label={`View invoice ${invoice.invoiceNumber}`}
+                                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+                                            >
+                                                <Eye size={17} />
+                                            </Link>
+                                        </td>
+                                    </tr>
+                                ))
                             )}
                         </tbody>
                     </table>
                 </div>
 
                 {/* Pagination */}
-                <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Showing{' '}
-                        <span className="font-medium text-slate-700 dark:text-slate-200">
-                            {startItem}-{endItem}
-                        </span>{' '}
-                        of{' '}
-                        <span className="font-medium text-slate-700 dark:text-slate-200">
-                            {filteredInvoices.length}
-                        </span>{' '}
-                        invoices
-                    </p>
+                {totalCount > 0 && (
+                    <div className="flex items-center justify-between border-t border-slate-200 px-5 py-3.5 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-400">
+                        <p>
+                            Showing <span className="font-semibold">{startItem}</span> to{' '}
+                            <span className="font-semibold">{endItem}</span> of{' '}
+                            <span className="font-semibold">{totalCount}</span> invoices
+                        </p>
 
-                    <div className="flex items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={() =>
-                                setCurrentPage((page) =>
-                                    Math.max(1, page - 1),
-                                )
-                            }
-                            disabled={safePage <= 1}
-                            aria-label="Previous page"
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                        >
-                            <ChevronLeft size={18} />
-                        </button>
-
-                        <span className="min-w-20 text-center text-sm font-medium text-slate-700 dark:text-slate-200">
-                            Page {safePage} of {totalPages}
-                        </span>
-
-                        <button
-                            type="button"
-                            onClick={() =>
-                                setCurrentPage((page) =>
-                                    Math.min(totalPages, page + 1),
-                                )
-                            }
-                            disabled={safePage >= totalPages}
-                            aria-label="Next page"
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                        >
-                            <ChevronRight size={18} />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                disabled={safePage <= 1}
+                                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                            >
+                                <ChevronLeft size={16} />
+                            </button>
+                            <span>
+                                Page {safePage} of {totalPages}
+                            </span>
+                            <button
+                                type="button"
+                                disabled={safePage >= totalPages}
+                                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                            >
+                                <ChevronRight size={16} />
+                            </button>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
         </section>
     )

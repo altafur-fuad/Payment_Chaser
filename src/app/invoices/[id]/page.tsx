@@ -5,7 +5,7 @@
 
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -28,7 +28,8 @@ import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ToneBadge } from '@/components/shared/ToneBadge'
 import { CurrencyText } from '@/components/shared/CurrencyText'
 import { useInvoices } from '@/lib/mock/use-mock-data'
-import { markInvoiceAsPaid, saveInvoice } from '@/lib/mock/storage'
+import { getInvoiceById, markAsPaid, sendReminderNow } from '@/app/actions/invoices'
+import { USE_MOCK, isSupabaseConfigured } from '@/lib/config'
 import type { Invoice } from '@/types'
 
 function DetailItem({
@@ -80,13 +81,53 @@ function SectionCard({
 export default function InvoiceDetailsPage() {
     const params = useParams<{ id: string }>()
     const invoiceId = params.id
-    const invoices = useInvoices()
+
+    const isMockLocal = USE_MOCK && !isSupabaseConfigured()
+    const mockInvoices = useInvoices()
+
+    const [dbInvoice, setDbInvoice] = useState<Invoice | null>(null)
+    const [loading, setLoading] = useState(!isMockLocal)
+    const [actionNotice, setActionNotice] = useState<string | null>(null)
+
+    useEffect(() => {
+        if (isMockLocal) return
+
+        let isCancelled = false
+        if (invoiceId) {
+            getInvoiceById(invoiceId).then((res) => {
+                if (isCancelled) return
+                setLoading(false)
+                if (res.ok) {
+                    setDbInvoice(res.data)
+                }
+            })
+        }
+
+        return () => {
+            isCancelled = true
+        }
+    }, [isMockLocal, invoiceId])
 
     const invoice = useMemo(() => {
-        return invoices.find((item) => item.id === invoiceId)
-    }, [invoices, invoiceId])
+        if (isMockLocal) {
+            return mockInvoices.find((item) => item.id === invoiceId)
+        }
+        return dbInvoice
+    }, [isMockLocal, mockInvoices, invoiceId, dbInvoice])
 
-    const [actionNotice, setActionNotice] = useState<string | null>(null)
+    if (loading) {
+        return (
+            <div className="flex min-h-screen bg-slate-50 dark:bg-[#0B1220]">
+                <Sidebar />
+                <div className="flex min-w-0 flex-1 flex-col">
+                    <Topbar />
+                    <main className="flex-1 p-8 text-center text-slate-500">
+                        Loading invoice details...
+                    </main>
+                </div>
+            </div>
+        )
+    }
 
     if (!invoice) {
         return (
@@ -133,23 +174,25 @@ export default function InvoiceDetailsPage() {
               ? 'firm'
               : 'friendly'
 
-    const handleMarkAsPaid = () => {
-        markInvoiceAsPaid(invoice.id)
-        setActionNotice(
-            `Invoice ${invoice.invoiceNumber} has been marked as paid. Future reminders have been cancelled.`,
-        )
+    const handleMarkAsPaid = async () => {
+        const res = await markAsPaid(invoice.id)
+        if (res.ok) {
+            setDbInvoice(res.data)
+            setActionNotice(
+                `Invoice ${invoice.invoiceNumber} has been marked as paid. Future scheduled reminders have been cancelled in the database.`,
+            )
+        } else {
+            setActionNotice(res.error)
+        }
     }
 
-    const handleSimulateReminder = () => {
-        const nextSent = (invoice.remindersSent ?? 0) + 1
-        const updatedInvoice: Invoice = {
-            ...invoice,
-            remindersSent: nextSent,
+    const handleSimulateReminder = async () => {
+        const res = await sendReminderNow(invoice.id)
+        if (res.ok) {
+            setActionNotice('Reminder recorded.')
+        } else {
+            setActionNotice(res.error)
         }
-        saveInvoice(updatedInvoice)
-        setActionNotice(
-            `Simulated reminder sent to ${invoice.clientName} via ${invoice.channels.join(' & ')}. (Production sending will connect to email/WhatsApp webhooks).`,
-        )
     }
 
     return (

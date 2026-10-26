@@ -10,7 +10,7 @@ import Link from 'next/link'
 
 import { useInvoices } from '@/lib/mock/use-mock-data'
 import { getNeedsAttentionItems } from '@/lib/mock/storage'
-import type { Invoice } from '@/types'
+import type { Invoice, NeedsAttentionItem } from '@/types'
 
 function formatAmount(amount: number, currency: string = 'USD'): string {
     try {
@@ -26,12 +26,13 @@ function formatAmount(amount: number, currency: string = 'USD'): string {
 
 interface NeedsAttentionProps {
     invoices?: Invoice[]
+    items?: NeedsAttentionItem[]
 }
 
-export function NeedsAttention({ invoices: propInvoices }: NeedsAttentionProps) {
+export function NeedsAttention({ invoices: propInvoices, items: propItems }: NeedsAttentionProps) {
     const storeInvoices = useInvoices()
     const invoices = propInvoices ?? storeInvoices
-    const items = getNeedsAttentionItems(invoices)
+    const items = propItems ?? getNeedsAttentionItems(invoices)
 
     return (
         <section className="space-y-4">

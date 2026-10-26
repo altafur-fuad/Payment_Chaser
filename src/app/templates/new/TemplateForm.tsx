@@ -1,17 +1,27 @@
 'use client'
 
-import { useState } from 'react'
+/**
+ * @file src/app/templates/new/TemplateForm.tsx
+ * @description Form to create or edit reminder templates connected to Server Actions.
+ * @phase 2
+ * @author Payment Chaser Team
+ * @created 2026-10-01
+ */
+
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CheckCircle2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 
 import {
-    getTemplateById,
     createTemplate,
-    saveTemplate,
-} from '@/lib/mock/storage'
+    getTemplateById,
+    updateTemplate,
+} from '@/app/actions/templates'
+import { getTemplateById as getMockTemplateById } from '@/lib/mock/storage'
+import { USE_MOCK, isSupabaseConfigured } from '@/lib/config'
 import type { ReminderTone, Template, TemplateInput } from '@/types'
 
 const templateSchema = z.object({
@@ -30,7 +40,7 @@ const templateSchema = z.object({
     body: z
         .string()
         .min(10, 'Message body must be at least 10 characters.')
-        .max(2000, 'Message body is too long.'),
+        .max(3000, 'Message body is too long.'),
 })
 
 type TemplateFormValues = z.infer<typeof templateSchema>
@@ -40,31 +50,61 @@ interface TemplateFormProps {
 }
 
 export function TemplateForm({ templateId }: TemplateFormProps) {
-    const [submitted, setSubmitted] = useState(false)
-
-    const [existingTemplate] = useState<Template | undefined>(() => {
-        if (!templateId) return undefined
-        return getTemplateById(templateId)
-    })
-
+    const isMockLocal = USE_MOCK && !isSupabaseConfigured()
     const isEditMode = Boolean(templateId)
+
+    const [existingTemplate, setExistingTemplate] = useState<Template | null>(() => {
+        if (isMockLocal && templateId) {
+            return getMockTemplateById(templateId) || null
+        }
+        return null
+    })
+    const [loading, setLoading] = useState(isEditMode && !isMockLocal)
+    const [submitted, setSubmitted] = useState(false)
+    const [serverError, setServerError] = useState<string | null>(null)
 
     const {
         register,
         handleSubmit,
         reset,
+        setValue,
         formState: { errors, isSubmitting },
     } = useForm<TemplateFormValues>({
         resolver: zodResolver(templateSchema),
         defaultValues: {
-            name: existingTemplate?.name ?? '',
-            tone: existingTemplate?.tone ?? 'friendly',
-            subject: existingTemplate?.subject ?? '',
-            body: existingTemplate?.body ?? '',
+            name: '',
+            tone: 'friendly',
+            subject: '',
+            body: '',
         },
     })
 
+    useEffect(() => {
+        if (!templateId || isMockLocal) return
+
+        let isCancelled = false
+
+        getTemplateById(templateId).then((res) => {
+            if (isCancelled) return
+            setLoading(false)
+
+            if (res.ok && res.data) {
+                setExistingTemplate(res.data)
+                setValue('name', res.data.name)
+                setValue('tone', res.data.tone)
+                setValue('subject', res.data.subject)
+                setValue('body', res.data.body)
+            }
+        })
+
+        return () => {
+            isCancelled = true
+        }
+    }, [templateId, isMockLocal, setValue])
+
     const onSubmit = async (values: TemplateFormValues) => {
+        setServerError(null)
+
         const input: TemplateInput = {
             name: values.name.trim(),
             tone: values.tone as ReminderTone,
@@ -72,32 +112,38 @@ export function TemplateForm({ templateId }: TemplateFormProps) {
             body: values.body.trim(),
         }
 
-        if (isEditMode && existingTemplate) {
-            saveTemplate({
-                ...existingTemplate,
-                ...input,
-            })
-        } else {
-            createTemplate(input)
+        const res = isEditMode && templateId
+            ? await updateTemplate(templateId, input)
+            : await createTemplate(input)
+
+        if (!res.ok) {
+            setServerError(res.error)
+            return
         }
 
         setSubmitted(true)
     }
 
-    if (templateId && !existingTemplate) {
+    if (loading) {
         return (
-            <div className="max-w-2xl rounded-lg border border-border bg-card p-8 text-center">
+            <div className="p-8 text-center text-slate-500">
+                Loading template details...
+            </div>
+        )
+    }
+
+    if (isEditMode && !existingTemplate && !loading) {
+        return (
+            <div className="max-w-2xl rounded-2xl border border-border bg-card p-8 text-center">
                 <h2 className="text-xl font-semibold text-foreground">
                     Template not found
                 </h2>
-
                 <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-                    The template you are trying to edit does not exist.
+                    The template you are trying to edit does not exist or may have been deleted.
                 </p>
-
                 <Link
                     href="/templates"
-                    className="mt-6 inline-flex min-h-10 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                    className="mt-6 inline-flex min-h-10 items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
                 >
                     Back to Templates
                 </Link>
@@ -107,7 +153,7 @@ export function TemplateForm({ templateId }: TemplateFormProps) {
 
     if (submitted) {
         return (
-            <div className="max-w-2xl rounded-lg border border-border bg-card p-8 text-center">
+            <div className="max-w-2xl rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
                 <CheckCircle2
                     size={48}
                     className="mx-auto text-emerald-500"
@@ -115,21 +161,17 @@ export function TemplateForm({ templateId }: TemplateFormProps) {
                 />
 
                 <h2 className="mt-4 text-xl font-semibold text-foreground">
-                    {isEditMode
-                        ? 'Template updated successfully'
-                        : 'Template created successfully'}
+                    {isEditMode ? 'Template updated successfully' : 'Template created successfully'}
                 </h2>
 
                 <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-                    {isEditMode
-                        ? 'Your template changes have been saved.'
-                        : 'Your payment reminder template has been created.'}
+                    Your template has been saved to your account and is ready to use in payment reminders.
                 </p>
 
                 <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
                     <Link
                         href="/templates"
-                        className="inline-flex min-h-10 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                        className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
                     >
                         Back to Templates
                     </Link>
@@ -145,10 +187,11 @@ export function TemplateForm({ templateId }: TemplateFormProps) {
                                     body: '',
                                 })
                                 setSubmitted(false)
+                                setServerError(null)
                             }}
-                            className="inline-flex min-h-10 items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-slate-50 dark:hover:bg-slate-900"
+                            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border bg-background px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-slate-100 dark:hover:bg-slate-800"
                         >
-                            Add Another Template
+                            Create Another Template
                         </button>
                     )}
                 </div>
@@ -159,27 +202,45 @@ export function TemplateForm({ templateId }: TemplateFormProps) {
     return (
         <form
             onSubmit={handleSubmit(onSubmit)}
-            className="max-w-2xl space-y-6 rounded-lg border border-border bg-card p-6 md:p-8"
+            className="max-w-2xl space-y-6 rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8"
         >
-            <div className="space-y-5">
+            <Link
+                href="/templates"
+                className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400"
+            >
+                <ArrowLeft size={16} />
+                Back to templates
+            </Link>
+
+            {serverError && (
+                <div
+                    role="alert"
+                    className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+                >
+                    <AlertCircle size={18} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
+                    <span>{serverError}</span>
+                </div>
+            )}
+
+            <div className="space-y-4">
                 <div>
                     <label
                         htmlFor="name"
-                        className="mb-2 block text-sm font-medium text-foreground"
+                        className="block text-sm font-medium text-foreground"
                     >
-                        Template Name
+                        Template Name <span className="text-red-500">*</span>
                     </label>
 
                     <input
+                        {...register('name')}
                         id="name"
                         type="text"
-                        placeholder="e.g. Friendly Payment Reminder"
-                        {...register('name')}
-                        className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-primary"
+                        placeholder="e.g. Standard Follow-up"
+                        className="mt-2 flex h-11 w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-primary"
                     />
 
                     {errors.name && (
-                        <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                        <p className="mt-1 text-xs text-red-500">
                             {errors.name.message}
                         </p>
                     )}
@@ -188,15 +249,15 @@ export function TemplateForm({ templateId }: TemplateFormProps) {
                 <div>
                     <label
                         htmlFor="tone"
-                        className="mb-2 block text-sm font-medium text-foreground"
+                        className="block text-sm font-medium text-foreground"
                     >
-                        Tone
+                        Reminder Tone
                     </label>
 
                     <select
-                        id="tone"
                         {...register('tone')}
-                        className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-primary"
+                        id="tone"
+                        className="mt-2 flex h-11 w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-primary"
                     >
                         <option value="friendly">Friendly</option>
                         <option value="firm">Firm</option>
@@ -204,7 +265,7 @@ export function TemplateForm({ templateId }: TemplateFormProps) {
                     </select>
 
                     {errors.tone && (
-                        <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                        <p className="mt-1 text-xs text-red-500">
                             {errors.tone.message}
                         </p>
                     )}
@@ -213,73 +274,70 @@ export function TemplateForm({ templateId }: TemplateFormProps) {
                 <div>
                     <label
                         htmlFor="subject"
-                        className="mb-2 block text-sm font-medium text-foreground"
+                        className="block text-sm font-medium text-foreground"
                     >
-                        Subject
+                        Subject Line <span className="text-red-500">*</span>
                     </label>
 
                     <input
+                        {...register('subject')}
                         id="subject"
                         type="text"
-                        placeholder="Payment reminder for invoice {{invoiceNumber}}"
-                        {...register('subject')}
-                        className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-primary"
+                        placeholder="e.g. Friendly reminder: Invoice {{invoice_number}} is due soon"
+                        className="mt-2 flex h-11 w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-primary"
                     />
 
                     {errors.subject && (
-                        <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                        <p className="mt-1 text-xs text-red-500">
                             {errors.subject.message}
                         </p>
                     )}
                 </div>
 
                 <div>
-                    <label
-                        htmlFor="body"
-                        className="mb-2 block text-sm font-medium text-foreground"
-                    >
-                        Message Body
-                    </label>
+                    <div className="flex items-center justify-between">
+                        <label
+                            htmlFor="body"
+                            className="block text-sm font-medium text-foreground"
+                        >
+                            Message Body <span className="text-red-500">*</span>
+                        </label>
+
+                        <span className="text-xs text-slate-500">
+                            Variables: &#123;&#123;client_name&#125;&#125;, &#123;&#123;invoice_number&#125;&#125;, &#123;&#123;amount&#125;&#125;, &#123;&#123;due_date&#125;&#125;
+                        </span>
+                    </div>
 
                     <textarea
-                        id="body"
-                        rows={8}
-                        placeholder="Hi {{clientName}}, this is a reminder about invoice {{invoiceNumber}}."
                         {...register('body')}
-                        className="w-full resize-y rounded-md border border-border bg-background px-3 py-3 text-sm leading-6 text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-primary"
+                        id="body"
+                        rows={7}
+                        placeholder="Hi {{client_name}}, this is a friendly reminder that invoice {{invoice_number}} for {{amount}} is due on {{due_date}}..."
+                        className="mt-2 flex w-full rounded-xl border border-border bg-background p-3.5 text-sm leading-relaxed text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-primary"
                     />
 
-                    <p className="mt-1.5 text-xs text-slate-500">
-                        You can use variables like {'{{clientName}}'} and {'{{invoiceNumber}}'}.
-                    </p>
-
                     {errors.body && (
-                        <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                        <p className="mt-1 text-xs text-red-500">
                             {errors.body.message}
                         </p>
                     )}
                 </div>
             </div>
 
-            <div className="flex flex-col-reverse gap-3 border-t border-border pt-6 sm:flex-row sm:justify-end">
+            <div className="flex justify-end gap-3 pt-4 border-t border-border">
                 <Link
                     href="/templates"
-                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-slate-50 dark:hover:bg-slate-900"
+                    className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border bg-background px-5 py-2.5 text-sm font-medium text-foreground hover:bg-slate-100 dark:hover:bg-slate-800"
                 >
-                    <ArrowLeft size={17} aria-hidden="true" />
                     Cancel
                 </Link>
 
                 <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="inline-flex min-h-10 items-center justify-center rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60"
                 >
-                    {isSubmitting
-                        ? 'Saving...'
-                        : isEditMode
-                          ? 'Update Template'
-                          : 'Save Template'}
+                    {isSubmitting ? 'Saving...' : isEditMode ? 'Update Template' : 'Create Template'}
                 </button>
             </div>
         </form>

@@ -10,7 +10,7 @@ import Link from 'next/link'
 
 import { useInvoices } from '@/lib/mock/use-mock-data'
 import { getUpcomingInvoicesList } from '@/lib/mock/storage'
-import type { Invoice } from '@/types'
+import type { Invoice, UpcomingInvoice } from '@/types'
 
 function formatAmount(amount: number, currency: string = 'USD'): string {
     try {
@@ -37,12 +37,13 @@ function formatDate(dateString: string): string {
 
 interface UpcomingInvoicesProps {
     invoices?: Invoice[]
+    items?: UpcomingInvoice[]
 }
 
-export function UpcomingInvoices({ invoices: propInvoices }: UpcomingInvoicesProps) {
+export function UpcomingInvoices({ invoices: propInvoices, items: propItems }: UpcomingInvoicesProps) {
     const storeInvoices = useInvoices()
     const invoices = propInvoices ?? storeInvoices
-    const upcomingList = getUpcomingInvoicesList(invoices)
+    const upcomingList = propItems ?? getUpcomingInvoicesList(invoices)
 
     return (
         <section className="space-y-4">

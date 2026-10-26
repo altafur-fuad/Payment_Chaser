@@ -22,12 +22,11 @@ import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 
 import { useClients, useTemplates } from '@/lib/mock/use-mock-data'
-import {
-    saveInvoice,
-    generateInvoiceId,
-    isInvoiceNumberTaken,
-} from '@/lib/mock/storage'
-import type { Invoice, ReminderChannel } from '@/types'
+import { getClients } from '@/app/actions/clients'
+import { getTemplates } from '@/app/actions/templates'
+import { createInvoice } from '@/app/actions/invoices'
+import { USE_MOCK, isSupabaseConfigured } from '@/lib/config'
+import type { Client, ReminderChannel, Template } from '@/types'
 import { InvoicePreview } from './InvoicePreview'
 
 const invoiceSchema = z
@@ -200,10 +199,29 @@ function getLocalDate(): string {
 export function InvoiceForm({
     initialInvoiceTemplateId,
 }: InvoiceFormProps) {
-    const clients = useClients()
-    const templates = useTemplates()
+    const isMockLocal = USE_MOCK && !isSupabaseConfigured()
+    const mockClients = useClients()
+    const mockTemplates = useTemplates()
+
+    const [clientsList, setClientsList] = useState<Client[]>(mockClients)
+    const [templatesList, setTemplatesList] = useState<Template[]>(mockTemplates)
+
+    useEffect(() => {
+        if (!isMockLocal) {
+            getClients().then((res) => {
+                if (res.ok) setClientsList(res.data)
+            })
+            getTemplates().then((res) => {
+                if (res.ok) setTemplatesList(res.data)
+            })
+        }
+    }, [isMockLocal])
+
+    const clients = isMockLocal ? mockClients : clientsList
+    const templates = isMockLocal ? mockTemplates : templatesList
 
     const [submitted, setSubmitted] = useState(false)
+    const [savedInvoiceId, setSavedInvoiceId] = useState('')
     const [savedInvoiceNumber, setSavedInvoiceNumber] = useState('')
     const [saveError, setSaveError] = useState('')
 
@@ -332,57 +350,27 @@ export function InvoiceForm({
             return
         }
 
-        if (isInvoiceNumberTaken(values.invoiceNumber)) {
-            setSaveError(
-                'This invoice number already exists. Please enter a different number.',
-            )
-            return
-        }
-
-        const todayString = getLocalDate()
-        const dueDate = new Date(`${values.dueDate}T00:00:00`)
-        const today = new Date(`${todayString}T00:00:00`)
-
-        const daysOverdue = Math.max(
-            0,
-            Math.floor(
-                (today.getTime() - dueDate.getTime()) /
-                    (1000 * 60 * 60 * 24),
-            ),
-        )
-
-        const invoice: Invoice = {
-            id: generateInvoiceId(),
-            userId: 'demo-user',
+        const res = await createInvoice({
             clientId: values.clientId,
-            clientName: client.name,
-            templateId: values.templateId,
             invoiceNumber: values.invoiceNumber.trim(),
             amount: values.amount,
             currency: values.currency,
             issueDate: values.issueDate,
             dueDate: values.dueDate,
-            status: values.dueDate < todayString ? 'overdue' : 'pending',
+            templateId: values.templateId,
             channels: values.channels,
             remindersEnabled: values.remindersEnabled,
-            filePath: null,
-            notes: values.notes?.trim() || null,
-            paidAt: null,
-            createdAt: new Date().toISOString(),
-            remindersSent: 0,
-            daysOverdue,
+            notes: values.notes?.trim() || undefined,
+        })
+
+        if (!res.ok) {
+            setSaveError(res.error)
+            return
         }
 
-        try {
-            saveInvoice(invoice)
-            setSavedInvoiceNumber(invoice.invoiceNumber)
-            setSubmitted(true)
-        } catch (error) {
-            console.error('Failed to save invoice:', error)
-            setSaveError(
-                'Could not save the invoice. Please check browser storage and try again.',
-            )
-        }
+        setSavedInvoiceId(res.data.id)
+        setSavedInvoiceNumber(res.data.invoiceNumber)
+        setSubmitted(true)
     }
 
     if (submitted) {
@@ -397,8 +385,11 @@ export function InvoiceForm({
                 </h2>
 
                 <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-                    {savedInvoiceNumber} has been saved in this browser.
-                    Backend sync is not connected yet.
+                    Invoice <span className="font-semibold text-slate-900 dark:text-slate-100">{savedInvoiceNumber}</span> has been saved and synchronized with your account.
+                </p>
+
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 italic">
+                    Note: Local file validation passed. File uploads will be persisted to private cloud storage when cloud storage buckets are connected.
                 </p>
 
                 <p className="mt-3 text-sm text-foreground">
@@ -408,16 +399,24 @@ export function InvoiceForm({
 
                 <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
                     <Link
-                        href="/invoices"
+                        href={savedInvoiceId ? `/invoices/${savedInvoiceId}` : '/invoices'}
                         className="inline-flex min-h-11 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
                     >
-                        View Invoices
+                        View Invoice
+                    </Link>
+
+                    <Link
+                        href="/invoices"
+                        className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-surface"
+                    >
+                        All Invoices
                     </Link>
 
                     <button
                         type="button"
                         onClick={() => {
                             setSubmitted(false)
+                            setSavedInvoiceId('')
                             setSavedInvoiceNumber('')
                             setSaveError('')
                         }}

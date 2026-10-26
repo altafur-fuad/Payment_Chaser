@@ -15,17 +15,18 @@ import {
 import Link from 'next/link'
 
 import { useInvoices } from '@/lib/mock/use-mock-data'
-import { getRecentRemindersList } from '@/lib/mock/storage'
+import { getRecentRemindersList, type ReminderActivityItem } from '@/lib/mock/storage'
 import type { Invoice } from '@/types'
 
 interface RecentRemindersProps {
     invoices?: Invoice[]
+    items?: ReminderActivityItem[]
 }
 
-export function RecentReminders({ invoices: propInvoices }: RecentRemindersProps) {
+export function RecentReminders({ invoices: propInvoices, items: propItems }: RecentRemindersProps) {
     const storeInvoices = useInvoices()
     const invoices = propInvoices ?? storeInvoices
-    const reminders = getRecentRemindersList(invoices)
+    const reminders = propItems ?? getRecentRemindersList(invoices)
 
     return (
         <section className="space-y-4">
